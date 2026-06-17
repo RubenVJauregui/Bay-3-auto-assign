@@ -35,6 +35,21 @@ function matchesCustomerScope(name: string | undefined, scope: string[]): boolea
   });
 }
 
+function getList(data: unknown): Record<string, unknown>[] {
+  const obj = data as Record<string, unknown> | null | undefined;
+  const inner = obj?.data as Record<string, unknown> | unknown[] | null | undefined;
+  const candidates = [
+    Array.isArray(inner) ? inner : null,
+    Array.isArray((inner as Record<string, unknown> | null | undefined)?.list) ? (inner as Record<string, unknown>).list : null,
+    Array.isArray((inner as Record<string, unknown> | null | undefined)?.content) ? (inner as Record<string, unknown>).content : null,
+    Array.isArray((inner as Record<string, unknown> | null | undefined)?.records) ? (inner as Record<string, unknown>).records : null,
+    Array.isArray(obj?.list) ? obj?.list : null,
+    Array.isArray(obj?.content) ? obj?.content : null,
+    Array.isArray(obj?.records) ? obj?.records : null,
+  ];
+  return (candidates.find(Boolean) || []) as Record<string, unknown>[];
+}
+
 
 const PLANNED_ORDER_CUSTOMERS = [
   "ALL MARKET INC / VITA COCO",
@@ -319,6 +334,7 @@ export default function Bay5Report() {
   const [orderSearch, setOrderSearch] = useState("");
   const [customerFilter, setCustomerFilter] = useState<string | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [wiseDebug, setWiseDebug] = useState<string | null>(null);
   const [showAutoSuggest, setShowAutoSuggest] = useState(false);
   const [showAssignedHistory, setShowAssignedHistory] = useState(false);
   const [showOlderThan48h, setShowOlderThan48h] = useState(false);
@@ -795,6 +811,7 @@ export default function Bay5Report() {
     setInYardCustomers([]);
     setOrderCustomers([]);
     setDataError(null);
+    setWiseDebug(null);
     setLoading(false);
     setCountdown(REFRESH_INTERVAL_SEC);
   }, []);
@@ -834,12 +851,14 @@ export default function Bay5Report() {
     if (!token) return;
     setLoading(true);
     setDataError(null);
+    setWiseDebug("Checking WISE...");
+    const debugParts: string[] = [];
     try {
       // --- Section 1: fetch fresh non-closed in-yard receipts directly from WISE ---
       setReceipts([]);
       // --- Section 1 WISE receipt search for Bay 5 customers ---
       try {
-        const supplementRes = await fetch(`${WMS_API}/wms-bam/inbound/receipt/search-by-paging`, {
+        const supplementRes = await fetch(`${WMS_API}/wms/inbound/receipt/search-by-paging`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -856,7 +875,7 @@ export default function Bay5Report() {
         });
         if (supplementRes.ok) {
           const suppData = await supplementRes.json();
-          const suppItems: Record<string, unknown>[] = suppData?.data?.list || [];
+          const suppItems: Record<string, unknown>[] = getList(suppData);
           const existingContainers = new Set<string>();
           const existingRNs = new Set<string>();
 
@@ -927,15 +946,18 @@ export default function Bay5Report() {
             );
           }
           setReceipts(supplementRows);
+          debugParts.push(`Section 1 WISE ${suppItems.length}, Bay 5 ${supplementRows.length}`);
+        } else {
+          debugParts.push(`Section 1 WISE error ${supplementRes.status}`);
         }
-      } catch { /* Section 1 WISE receipt fetch failed */ }
+      } catch { debugParts.push("Section 1 WISE failed"); }
 
       // --- Planned Orders: resolve customer IDs then fetch orders ---
       const allCustomers: Customer[] = [];
       for (const name of [...new Set(PLANNED_ORDER_CUSTOMERS)]) {
         try {
-          const res = await apiFetch("/mdm/customer/search", { keyword: name, currentPage: 1, pageSize: 5 });
-          const items = res?.data || [];
+          const res = await apiFetch("/mdm/customer/search", { keyword: name, currentPage: 1, pageSize: 10 });
+          const items = getList(res);
           if (Array.isArray(items)) {
             for (const c of items) {
               allCustomers.push({
@@ -961,6 +983,7 @@ export default function Bay5Report() {
       setInYardCustomers([]);
 
       const orderIds = orderMatched.map((c) => c.id);
+      debugParts.push(`Section 2 customers ${orderMatched.length}`);
 
       let orderRes = null;
       if (orderIds.length > 0) {
@@ -975,13 +998,8 @@ export default function Bay5Report() {
       }
 
       if (orderRes) {
-        const items =
-          orderRes?.data?.list ||
-          orderRes?.data?.content ||
-          orderRes?.data?.records ||
-          orderRes?.content ||
-          orderRes?.records ||
-          [];
+        const items = getList(orderRes);
+        debugParts.push(`Section 2 orders ${Array.isArray(items) ? items.length : 0}`);
         const enriched = await Promise.all((Array.isArray(items) ? items : []).map(async (o: Record<string, unknown>) => {
           const custName =
             (o.customerName as string) ||
@@ -1002,7 +1020,7 @@ export default function Bay5Report() {
                 currentPage: 1,
                 pageSize: 10,
               });
-              const loads = loadRes?.data?.list || loadRes?.data?.content || loadRes?.data || [];
+              const loads = getList(loadRes);
               if (Array.isArray(loads) && loads.length > 0) {
                 const load = loads[0] as Record<string, unknown>;
                 loadTaskId = String(load.id || load.taskId || "");
@@ -1016,14 +1034,15 @@ export default function Bay5Report() {
         setOrders(enriched);
       } else {
         setOrders([]);
+        debugParts.push("Section 2 orders 0");
       }
 
       // --- Outbound Shipping: NEW load tasks with PICKED DN orders ---
       const shippingCustomers: Customer[] = [];
       for (const name of [...new Set(OUTBOUND_SHIPPING_CUSTOMERS)]) {
         try {
-          const res = await apiFetch("/mdm/customer/search", { keyword: name, currentPage: 1, pageSize: 5 });
-          const items = res?.data || [];
+          const res = await apiFetch("/mdm/customer/search", { keyword: name, currentPage: 1, pageSize: 10 });
+          const items = getList(res);
           if (Array.isArray(items)) {
             for (const c of items) {
               shippingCustomers.push({
@@ -1038,6 +1057,7 @@ export default function Bay5Report() {
         .filter((c, i, arr) => c.id && arr.findIndex((x) => x.id === c.id) === i)
         .filter((c) => matchesCustomerScope(c.name, OUTBOUND_SHIPPING_CUSTOMERS));
       const shippingCustomerIds = new Set(shippingMatched.map((c) => c.id));
+      debugParts.push(`Section 3 customers ${shippingMatched.length}`);
 
       try {
         const loadTaskRes = await wmsPost("/wms-bam/outbound/load-task/search-by-paging", {
@@ -1046,7 +1066,7 @@ export default function Bay5Report() {
           currentPage: 1,
           pageSize: 50,
         });
-        const loadTasks: Record<string, unknown>[] = loadTaskRes?.data?.list || [];
+        const loadTasks: Record<string, unknown>[] = getList(loadTaskRes);
         const shippingRows: Order[] = [];
 
         for (const lt of loadTasks) {
@@ -1126,11 +1146,14 @@ export default function Bay5Report() {
           });
         }
         setShippingLoads(shippingRows);
-      } catch { setShippingLoads([]); }
+        debugParts.push(`Section 3 WISE ${loadTasks.length}, picked ${shippingRows.length}`);
+      } catch { setShippingLoads([]); debugParts.push("Section 3 WISE failed"); }
 
+      setWiseDebug(debugParts.join(" | ") || "WISE responded, but no count details were returned.");
       setGeneratedAt(new Date());
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unable to load data at this time";
+      setWiseDebug(debugParts.length > 0 ? `${debugParts.join(" | ")} | stopped: ${msg}` : `WISE check stopped: ${msg}`);
       if (msg !== "Session expired") {
         setDataError(msg);
       }
@@ -1335,6 +1358,12 @@ export default function Bay5Report() {
         <span>Auto Suggest holds RNs and orders until Auto Assign is confirmed</span>
         <span>Auto Assign assigns new tasks only after confirmation</span>
       </div>
+
+      {wiseDebug && (
+        <div style={{ padding: "10px 14px", background: "rgba(255, 210, 77, 0.14)", border: "1px solid rgba(255, 210, 77, 0.5)", borderRadius: "6px", fontSize: "13px", color: "#ffe59b", fontWeight: 700 }}>
+          Debug WISE check: {wiseDebug}
+        </div>
+      )}
 
       {dataError && (
         <div style={{ padding: "8px 14px", background: "rgba(255,76,106,0.08)", border: "1px solid rgba(255,76,106,0.25)", borderRadius: "6px", fontSize: "11px", color: "var(--warning)" }}>
