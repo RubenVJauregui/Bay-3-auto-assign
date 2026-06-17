@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 const WMS_API = process.env.NEXT_PUBLIC_WMS_API_BASE_URL!;
-const IAM_URL = process.env.NEXT_PUBLIC_IAM_BASE_URL!;
 const FACILITY_ID = process.env.NEXT_PUBLIC_FACILITY_ID!;
 const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID!;
 const TIMEZONE = process.env.NEXT_PUBLIC_TIMEZONE!;
@@ -739,7 +738,7 @@ export default function Bay5Report() {
     setLoggingIn(true);
     setAuthError(null);
     try {
-      const res = await fetch(`${IAM_URL}/auth/exchange-token`, {
+      const res = await fetch("/api/auth/exchange-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ grant_type: "password", username: user, password: pass }),
