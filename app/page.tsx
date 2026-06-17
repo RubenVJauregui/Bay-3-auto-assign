@@ -8,20 +8,18 @@ const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID!;
 const TIMEZONE = process.env.NEXT_PUBLIC_TIMEZONE!;
 
 const INYARD_CUSTOMERS = [
-  "TCL NORTH AMERICA",
-  "LENNOX INDUSTRIES INC.",
-  "AMIEE LYNN, LNC.",
-  "KARAKA, LLC",
-  "NZXT",
-  "CMPC USA (Cut Paper and Rolls)",
-  "WOODY FLAW CREST INC",
-  "North Star",
-  "CMPC USA",
-  "La Jolla",
-  "ESI",
-  "TPV USA",
-  "Gurunanda",
-  "the only bean",
+  "ALL MARKET INC / VITA COCO",
+  "COME READY FOODS",
+  "HINT INC",
+  "SOURCE86",
+  "KACE TEA LLC",
+  "PLEASS GLOBAL LIMITED",
+  "PREFERRED BRANDS",
+  "RITUAL BEVERAGE COMPANY",
+  "ROAR BEVERAGES INC",
+  "SOUTHERN GLAZER'S WINE AND SPIRITS, LLC",
+  "SPLENDOR WATER LLC",
+  "WISMETTAC ASIAN FOODS",
 ];
 
 function matchesInYardCustomerScope(name?: string): boolean {
@@ -35,21 +33,29 @@ function matchesInYardCustomerScope(name?: string): boolean {
 
 
 const PLANNED_ORDER_CUSTOMERS = [
-  "TCL NORTH AMERICA",
-  "LENNOX INDUSTRIES INC.",
-  "AMIEE LYNN, LNC.",
-  "NZXT",
-  "CMPC USA (Cut Paper and Rolls)",
-  "WOODY FLAW CREST INC",
-  "North Star",
-  "CMPC USA",
-  "La Jolla",
-  "ESI",
-  "TPV USA",
+  "ALL MARKET INC / VITA COCO",
+  "COME READY FOODS",
+  "HINT INC",
+  "SOURCE86",
+  "KACE TEA LLC",
+  "PLEASS GLOBAL LIMITED",
+  "PREFERRED BRANDS",
+  "RITUAL BEVERAGE COMPANY",
+  "ROAR BEVERAGES INC",
+  "SOUTHERN GLAZER'S WINE AND SPIRITS, LLC",
+  "SPLENDOR WATER LLC",
+  "WISMETTAC ASIAN FOODS",
 ];
 
 const OUTBOUND_SHIPPING_CUSTOMERS = [
-  ...INYARD_CUSTOMERS,
+  "ALL MARKET INC / VITA COCO",
+  "HINT INC",
+  "INGREDIENT BROTHERS",
+  "PLEASS GLOBAL LIMITED",
+  "PREFERRED BRANDS",
+  "ROAR BEVERAGES INC",
+  "SOUTHERN GLAZER'S WINE AND SPIRITS, LLC",
+  "WISMETTAC ASIAN FOODS",
 ];
 
 const BAY5_ASSIGNEES = [
@@ -1165,7 +1171,7 @@ export default function Bay5Report() {
 
           if (!custId || !loadIds.length) continue;
 
-          // Check if customer is in shipping scope (INYARD_CUSTOMERS includes Gurunanda)
+          // Check if customer is in the Section 3 shipping scope
           const custName = orderMatched.find((c) => c.id === custId)?.name
             || (custId === "ORG-655875" ? "GURUNANDA, LLC" : "");
           const nameForScope = custName || custId;
