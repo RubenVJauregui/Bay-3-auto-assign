@@ -23,9 +23,13 @@ const INYARD_CUSTOMERS = [
 ];
 
 function matchesInYardCustomerScope(name?: string): boolean {
+  return matchesCustomerScope(name, INYARD_CUSTOMERS);
+}
+
+function matchesCustomerScope(name: string | undefined, scope: string[]): boolean {
   const normalized = String(name || "").toLowerCase().replace(/[.,]/g, "").trim();
   if (!normalized) return false;
-  return INYARD_CUSTOMERS.some((target) => {
+  return scope.some((target) => {
     const t = target.toLowerCase().replace(/[.,]/g, "").trim();
     return normalized === t || normalized.includes(t) || t.includes(normalized);
   });
@@ -818,154 +822,9 @@ export default function Bay5Report() {
     setLoading(true);
     setDataError(null);
     try {
-      // --- In-Yard FULL Equipment: use proxied bay3 dashboard API ---
-      let bay3Res: Record<string, unknown> | null = null;
-      try {
-        const res = await fetch("/api/dashboard-bay5", {
-          method: "POST",
-          cache: "no-store",
-          headers: {
-            "content-type": "application/json",
-            "cache-control": "no-cache",
-            authorization: `Bearer ${token}`,
-            "x-tenant-id": TENANT_ID,
-          },
-          body: JSON.stringify({
-            facilityId: FACILITY_ID,
-            facilityName: "Valley View",
-            includeAllCustomers: true,
-            timeZone: TIMEZONE,
-          }),
-        });
-        if (res.ok) {
-          bay3Res = await res.json() as Record<string, unknown>;
-        }
-      } catch { /* dashboard API unavailable */ }
-
-      if (bay3Res) {
-        const iyData = bay3Res.inYardFullEquipment as Record<string, unknown> | undefined;
-        if (iyData?.supported) {
-          const allRows = (iyData.rows as Record<string, unknown>[]) || [];
-
-          // Filter to explicit Bay 5 customer scope only; never show rows with a blank customer.
-          const rows = allRows.filter((r) => matchesInYardCustomerScope((r.customer as string) || (r.customerName as string) || ""));
-
-          // Resolve RN IDs per row from the entry ticket details.
-          // This avoids reusing a broad receipt-search result across different equipment rows.
-          // Example: ET-1107462 / MSNU7425537 -> RN-5007965.
-          const rnLookups = await Promise.all(
-            rows.map(async (r) => {
-              const eqNum = (r.equipmentNumber as string) || "";
-              const et = (r.entryTicket as string) || "";
-              if (!et) return null;
-              const headers = {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-                "X-Tenant-ID": TENANT_ID,
-                "X-Facility-ID": FACILITY_ID,
-                "Item-Time-Zone": TIMEZONE,
-              };
-
-              try {
-                const etRes = await fetch(`${WMS_API}/wms-bam/entry-ticket/${encodeURIComponent(et)}`, {
-                  method: "GET",
-                  headers,
-                  cache: "no-store",
-                });
-                if (etRes.ok) {
-                  const etData = await etRes.json();
-                  const detail = etData?.data || etData || {};
-                  const actions = Array.isArray(detail.equipmentActions) ? detail.equipmentActions : [];
-                  const action = actions.find((a: Record<string, unknown>) => {
-                    const equipmentNo = String(a.equipmentNo || a.containerNo || a.trailerNo || "").trim();
-                    return eqNum && equipmentNo === eqNum;
-                  }) || actions.find((a: Record<string, unknown>) => Array.isArray(a.receiptIds) && (a.receiptIds as unknown[]).length > 0);
-
-                  const actionReceiptIds = Array.isArray(action?.receiptIds) ? action.receiptIds as string[] : [];
-                  const receipts = Array.isArray(detail.receipts) ? detail.receipts : [];
-                  const matchingReceipt = receipts.find((x: Record<string, unknown>) => String(x.containerNo || x.equipmentNo || "") === eqNum)
-                    || receipts.find((x: Record<string, unknown>) => actionReceiptIds.includes(String(x.id || "")))
-                    || receipts[0];
-                  const receiptId = actionReceiptIds[0] || String(matchingReceipt?.id || "");
-                  const dockId = String(action?.currentLocationId || detail.dockId || matchingReceipt?.dockId || "");
-                  const dockName = String(action?.currentLocationName || detail.dockName || matchingReceipt?.dockName || "");
-                  const checkInEndTime = String(detail.checkInEndTime || "");
-                  if (receiptId) return { eqNum, et, receiptId, dockId, dockName, checkInEndTime };
-                }
-              } catch { /* fallback below */ }
-
-              try {
-                const rnRes = await fetch(`${WMS_API}/wms-bam/inbound/receipt/search-by-paging`, {
-                  method: "POST",
-                  headers,
-                  body: JSON.stringify({ entryId: et, currentPage: 1, pageSize: 10 }),
-                });
-                if (!rnRes.ok) return null;
-                const rnData = await rnRes.json();
-                const list = rnData?.data?.list || [];
-                if (Array.isArray(list) && list.length > 0) {
-                  const exact = list.find((x: Record<string, unknown>) => String(x.containerNo || x.equipmentNo || "") === eqNum);
-                  const imported = list.find((x: Record<string, unknown>) =>
-                    String(x.status || "").toUpperCase() === "IMPORTED" &&
-                    String(x.referenceNo || "") !== "CANCELLED" &&
-                    (!eqNum || String(x.containerNo || x.equipmentNo || "") === eqNum)
-                  );
-                  const chosen = exact || imported || list[0];
-                  return { eqNum, et, receiptId: String(chosen.id || ""), dockId: String(chosen.dockId || ""), dockName: String(chosen.dockName || ""), checkInEndTime: "" };
-                }
-              } catch { /* skip */ }
-              return null;
-            })
-          );
-          const rnMap = new Map<string, { receiptId: string; dockId: string; dockName: string; checkInEndTime: string }>();
-          for (const item of rnLookups) {
-            if (item) rnMap.set(item.et, { receiptId: item.receiptId, dockId: item.dockId, dockName: item.dockName, checkInEndTime: item.checkInEndTime });
-          }
-
-          const enriched: Receipt[] = rows
-            .filter((r) => {
-              const eqType = ((r.equipmentType as string) || "").toLowerCase();
-              return eqType.includes("container") || (!eqType.includes("trailer") && !eqType.includes("tractor"));
-            })
-            .map((r) => {
-            const custName = (r.customer as string) || "—";
-            const et = (r.entryTicket as string) || "";
-            const eqNum = (r.equipmentNumber as string) || "";
-            const stableId = et || eqNum;
-            const resolved = resolveAssignee(custName, stableId);
-            const rnInfo = rnMap.get(et);
-            return {
-              equipmentNumber: eqNum,
-              equipmentType: (r.equipmentType as string) || "",
-              entryTicket: et,
-              receiptId: rnInfo?.receiptId || "",
-              dockId: rnInfo?.dockId || (r.location as string) || "",
-              checkIn: rnInfo?.checkInEndTime || (r.checkIn as string) || "",
-              timeInYard: (r.timeInYard as string) || "",
-              customer: custName,
-              customerName: custName,
-              location: rnInfo?.dockName || (r.location as string) || "",
-              status: (r.status as string) || "",
-              details: (r.details as string) || "",
-              id: et,
-              containerNo: eqNum,
-              assignee: resolved?.displayName || "Unassigned",
-              assigneeUserId: resolved?.userId || "",
-            };
-          });
-          setReceipts(enriched.filter((r) => {
-            const eq = String(r.equipmentNumber || r.containerNo || "");
-            const type = String(r.equipmentType || "").toUpperCase();
-            return matchesInYardCustomerScope(r.customerName || r.customer) && !!eq && (type.includes("CONTAINER") || !!r.containerNo);
-          }));
-        } else {
-          setReceipts([]);
-        }
-      } else {
-        setReceipts([]);
-      }
-
-      // --- Supplement: fetch non-closed receipts with containers for Bay 5 customers not already in Section 1 ---
+      // --- Section 1: fetch fresh non-closed in-yard receipts directly from WISE ---
+      setReceipts([]);
+      // --- Section 1 WISE receipt search for Bay 5 customers ---
       try {
         const supplementRes = await fetch(`${WMS_API}/wms-bam/inbound/receipt/search-by-paging`, {
           method: "POST",
@@ -985,12 +844,8 @@ export default function Bay5Report() {
         if (supplementRes.ok) {
           const suppData = await supplementRes.json();
           const suppItems: Record<string, unknown>[] = suppData?.data?.list || [];
-          const existingContainers = new Set(
-            (receipts || []).map((r: Receipt) => r.containerNo || r.equipmentNumber || "").filter(Boolean)
-          );
-          const existingRNs = new Set(
-            (receipts || []).map((r: Receipt) => r.receiptId || "").filter(Boolean)
-          );
+          const existingContainers = new Set<string>();
+          const existingRNs = new Set<string>();
 
           const supplementRows: Receipt[] = [];
           for (const r of suppItems) {
@@ -1057,10 +912,10 @@ export default function Bay5Report() {
                 } catch { /* skip, checkIn stays empty */ }
               })
             );
-            setReceipts((prev) => [...prev, ...supplementRows]);
           }
+          setReceipts(supplementRows);
         }
-      } catch { /* supplement fetch failed, Section 1 still shows upstream rows */ }
+      } catch { /* Section 1 WISE receipt fetch failed */ }
 
       // --- Planned Orders: resolve customer IDs then fetch orders ---
       const allCustomers: Customer[] = [];
@@ -1151,9 +1006,30 @@ export default function Bay5Report() {
       }
 
       // --- Outbound Shipping: NEW load tasks with PICKED DN orders ---
+      const shippingCustomers: Customer[] = [];
+      for (const name of [...new Set(OUTBOUND_SHIPPING_CUSTOMERS)]) {
+        try {
+          const res = await apiFetch("/mdm/customer/search", { keyword: name, currentPage: 1, pageSize: 5 });
+          const items = res?.data || [];
+          if (Array.isArray(items)) {
+            for (const c of items) {
+              shippingCustomers.push({
+                id: (c.orgId || c.id || "") as string,
+                name: (c.name || c.fullName || "") as string,
+              });
+            }
+          }
+        } catch { /* skip */ }
+      }
+      const shippingMatched = shippingCustomers
+        .filter((c, i, arr) => c.id && arr.findIndex((x) => x.id === c.id) === i)
+        .filter((c) => matchesCustomerScope(c.name, OUTBOUND_SHIPPING_CUSTOMERS));
+      const shippingCustomerIds = new Set(shippingMatched.map((c) => c.id));
+
       try {
         const loadTaskRes = await wmsPost("/wms-bam/outbound/load-task/search-by-paging", {
           statuses: ["NEW"],
+          customerIds: [...shippingCustomerIds],
           currentPage: 1,
           pageSize: 50,
         });
@@ -1172,10 +1048,9 @@ export default function Bay5Report() {
           if (!custId || !loadIds.length) continue;
 
           // Check if customer is in the Section 3 shipping scope
-          const custName = orderMatched.find((c) => c.id === custId)?.name
-            || (custId === "ORG-655875" ? "GURUNANDA, LLC" : "");
+          const custName = shippingMatched.find((c) => c.id === custId)?.name || "";
           const nameForScope = custName || custId;
-          if (!matchesInYardCustomerScope(nameForScope)) continue;
+          if (!shippingCustomerIds.has(custId) && !matchesCustomerScope(nameForScope, OUTBOUND_SHIPPING_CUSTOMERS)) continue;
 
           // Get load detail to find orderIds
           let dnIds: string[] = [];
