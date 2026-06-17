@@ -786,6 +786,19 @@ export default function Bay5Report() {
     }
   }, []);
 
+  const signOut = useCallback(() => {
+    localStorage.removeItem("bay5_token");
+    setToken(null);
+    setReceipts([]);
+    setOrders([]);
+    setShippingLoads([]);
+    setInYardCustomers([]);
+    setOrderCustomers([]);
+    setDataError(null);
+    setLoading(false);
+    setCountdown(REFRESH_INTERVAL_SEC);
+  }, []);
+
   useEffect(() => {
     const saved = localStorage.getItem("bay5_token");
     if (saved) {
@@ -1271,6 +1284,7 @@ export default function Bay5Report() {
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <button className="btn-action" onClick={() => fetchData()}>Refresh</button>
           <button className="btn-action">Download CSV</button>
+          <button className="btn-action" onClick={signOut}>Sign out</button>
         </div>
       </div>
 
