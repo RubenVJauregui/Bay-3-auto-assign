@@ -1229,6 +1229,14 @@ export default function Bay5Report() {
           <p style={{ fontSize: "12px", color: "var(--fg-dim)", marginBottom: "16px" }}>
             Valley View (LT_F1) &mdash; Sign in to view dashboard
           </p>
+          <button
+            type="button"
+            className="btn-action"
+            onClick={signOut}
+            style={{ width: "100%", padding: "8px", fontSize: "12px", marginBottom: "12px" }}
+          >
+            Clear saved login
+          </button>
           {authError && <p style={{ fontSize: "12px", color: "var(--danger)", marginBottom: "12px" }}>{authError}</p>}
           <form
             onSubmit={(e) => {
@@ -1305,6 +1313,13 @@ export default function Bay5Report() {
           <span style={{ fontSize: "11px", color: "var(--fg-muted)", display: "block" }}>
             refreshing in {formatCountdown(countdown)}
           </span>
+          <button
+            className="btn-action"
+            onClick={signOut}
+            style={{ marginTop: "6px", padding: "6px 12px", fontSize: "11px", borderColor: "var(--danger)", color: "var(--danger)" }}
+          >
+            Log out
+          </button>
         </div>
       </header>
 
