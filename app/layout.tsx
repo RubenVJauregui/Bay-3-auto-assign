@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bay 3 Dashboard — Valley View",
-  description: "Bay 3 in-yard equipment and planned outbound orders dashboard for Valley View (LT_F1)",
+  title: "Bay 5 Dashboard — Valley View",
+  description: "Bay 5 in-yard equipment and planned outbound orders dashboard for Valley View (LT_F1)",
 };
 
 export default function RootLayout({

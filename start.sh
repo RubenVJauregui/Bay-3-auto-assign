@@ -1,12 +1,14 @@
-#!/usr/bin/env bash
-set -e
-cd "$(dirname "$0")"
-echo "Bay 3 Auto Assign Dashboard"
-echo "Installing dependencies if needed..."
+#!/bin/bash
+echo "======================================"
+echo "  Bay 5 Dashboard - Valley View (LT_F1)"
+echo "======================================"
+echo ""
+echo "Installing dependencies..."
 npm install
-echo "Building dashboard..."
+echo ""
+echo "Building..."
 npm run build
-echo "Starting dashboard at http://localhost:3000"
-echo "Keep this terminal open while using the dashboard."
-if command -v open >/dev/null 2>&1; then open http://localhost:3000; fi
+echo ""
+echo "Starting server on http://localhost:3000"
+echo "Press Ctrl+C to stop."
 npm run start

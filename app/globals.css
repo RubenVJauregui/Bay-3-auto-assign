@@ -38,11 +38,11 @@ body {
       rgba(3, 10, 22, 0.74)
     ),
     url("https://3001-i86g5p7mf0o36mw8hbouz.e2b.app/assets/storm-dashboard-bg.png"),
-    var(--bg-body);
+    none;
   background-size: cover;
   background-position: center;
-  background-attachment: fixed;
   background-repeat: no-repeat;
+  background-attachment: fixed;
   color: var(--fg);
   font-family: Inter, var(--font-sans, system-ui, -apple-system, sans-serif);
   font-size: 12px;
@@ -218,81 +218,20 @@ input[type="search"]::placeholder { color: var(--fg-muted); }
 }
 .info-banner span::before { content: "•"; margin-right: 4px; color: var(--accent); }
 
-/* Cotton Metric Grid */
-.cotton-metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-@media (max-width: 1024px) { .cotton-metric-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 600px) { .cotton-metric-grid { grid-template-columns: 1fr; } }
 
-.cotton-metric-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 14px 14px 12px;
-  box-shadow: var(--shadow-card);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-  text-align: left;
-  width: 100%;
+/* Keep top action buttons the same green color */
+.btn-action,
+.btn-action.primary,
+.btn-action.active {
+  background: rgba(14, 118, 76, 0.88) !important;
+  border: 1px solid #25d98a !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(81, 255, 174, 0.20), 0 0 14px rgba(37, 217, 138, 0.18) !important;
 }
-.cotton-metric-card:hover { background: rgba(10, 28, 56, 0.8); border-color: var(--accent); }
-.cotton-metric-card.active { border-color: #ff8c42; background: rgba(255, 140, 66, 0.06); }
 
-.cmc-icon {
-  width: 36px; height: 36px;
-  border-radius: 8px;
-  background: rgba(77, 105, 255, 0.1);
-  border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
+.btn-action:hover,
+.btn-action.primary:hover,
+.btn-action.active:hover {
+  background: rgba(20, 150, 94, 0.94) !important;
+  border-color: #53f0a6 !important;
 }
-.cotton-metric-card.active .cmc-icon { background: rgba(255, 140, 66, 0.12); border-color: rgba(255, 140, 66, 0.4); }
-
-.cmc-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.cmc-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cmc-value { font-size: 26px; font-weight: 800; color: var(--fg-bright); line-height: 1.1; }
-.cmc-sublabel { font-size: 10px; color: var(--fg-muted); }
-
-/* Cotton Detail Panel */
-.cotton-detail-panel {
-  background: var(--bg-section);
-  border: 1px solid rgba(255, 140, 66, 0.3);
-  border-radius: 6px;
-  overflow: hidden;
-  animation: cdp-slide 0.15s ease-out;
-}
-@keyframes cdp-slide { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-
-.cdp-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-table);
-}
-.cdp-icon { font-size: 16px; }
-.cdp-title { font-size: 13px; font-weight: 700; color: #f4f8ff; flex: 1; }
-.cdp-count { font-size: 10px; color: var(--fg-muted); }
-
-.cdp-rows { max-height: 240px; overflow-y: auto; }
-.cdp-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 14px;
-  border-bottom: 1px solid var(--border-table);
-  font-size: 11px;
-  gap: 12px;
-}
-.cdp-row:last-child { border-bottom: none; }
-.cdp-row:hover { background: rgba(77, 105, 255, 0.04); }
-.cdp-cell-left { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-.cdp-cell-right { color: var(--fg-muted); white-space: nowrap; text-align: right; flex-shrink: 0; }
