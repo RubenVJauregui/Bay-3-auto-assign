@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 
-const DATA_PATH = "/tmp/bay5-assigned-today.json";
+const DATA_PATH = "/tmp/bay3-assigned-today.json";
 
 interface AssignedRecord {
   key: string;

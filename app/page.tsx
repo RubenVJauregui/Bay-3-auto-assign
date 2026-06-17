@@ -48,6 +48,10 @@ const PLANNED_ORDER_CUSTOMERS = [
   "TPV USA",
 ];
 
+const OUTBOUND_SHIPPING_CUSTOMERS = [
+  ...INYARD_CUSTOMERS,
+];
+
 const BAY5_ASSIGNEES = [
   { displayName: "Daniel Beltran", username: "Angel84daniel@icloud.com", userId: "1932077596691410945" },
   { displayName: "Arnulfo Munguia", username: "amunguia", userId: "89" },
@@ -59,6 +63,7 @@ const BAY5_ASSIGNEES = [
   { displayName: "Jose Rosas", username: "employee13VF", userId: "1912952560211685378" },
   { displayName: "Sebastian Munguia", username: "semunguia", userId: "1853651235951436835" },
   { displayName: "RUBI MANUEL SANDOVAL", username: "mramirez", userId: "9233" },
+  { displayName: "SEBASTIAN GONZALEZ", username: "rojiblancogonzalez@gmail.com", userId: "1932554036460883969" },
 ];
 
 interface Assignee {
@@ -112,6 +117,15 @@ function resolveAssignee(customerName?: string, stableId?: string): Assignee | n
   return null;
 }
 
+function resolveAssigneeFromHistory(historyMap: Map<string, string>, customerId?: string, customerName?: string, stableId?: string): Assignee | null {
+  if (customerId && historyMap.has(customerId)) {
+    const userId = historyMap.get(customerId)!;
+    const found = BAY5_ASSIGNEES.find((a) => a.userId === userId);
+    if (found) return found;
+  }
+  return resolveAssignee(customerName, stableId);
+}
+
 const DASHBOARD_API = "https://wms-valley-view-dashboard-68cacf.coolify.item.pub";
 
 const REFRESH_INTERVAL_SEC = 300;
@@ -158,6 +172,8 @@ interface Order {
   dockId?: string;
   location?: string;
   loadTaskId?: string;
+  loadStatus?: string;
+  entryId?: string;
 }
 
 interface Customer {
@@ -268,7 +284,7 @@ function addAssignedToday(record: AssignedRecord) {
 
 async function fetchSharedAssignedToday(): Promise<AssignedRecord[]> {
   try {
-    const res = await fetch("/api/assigned-today");
+    const res = await fetch("/api/assigned-today", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       return data.records || [];
@@ -283,6 +299,7 @@ export default function Bay5Report() {
   const [loading, setLoading] = useState(true);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [shippingLoads, setShippingLoads] = useState<Order[]>([]);
   const [inYardCustomers, setInYardCustomers] = useState<Customer[]>([]);
   const [orderCustomers, setOrderCustomers] = useState<Customer[]>([]);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
@@ -294,8 +311,10 @@ export default function Bay5Report() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [showAutoSuggest, setShowAutoSuggest] = useState(false);
   const [showAssignedHistory, setShowAssignedHistory] = useState(false);
+  const [showOlderThan48h, setShowOlderThan48h] = useState(false);
   const [assignedByDashboard, setAssignedByDashboard] = useState<Set<string>>(new Set());
   const [assignedTodayList, setAssignedTodayList] = useState<AssignedRecord[]>([]);
+  const [activeKpi, setActiveKpi] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -303,7 +322,7 @@ export default function Bay5Report() {
     fetchSharedAssignedToday().then((records) => setAssignedTodayList(records));
     const interval = setInterval(() => {
       fetchSharedAssignedToday().then((records) => setAssignedTodayList(records));
-    }, 30000);
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -721,7 +740,7 @@ export default function Bay5Report() {
         }
       }
       if (newRecords.length > 0) {
-        await Promise.all(newRecords.map((r) => addAssignedToday(r)));
+        setAssignedTodayList((prev) => [...prev, ...newRecords]);
       }
       fetchSharedAssignedToday().then((records) => setAssignedTodayList(records));
     }
@@ -793,8 +812,8 @@ export default function Bay5Report() {
     setLoading(true);
     setDataError(null);
     try {
-      // The upstream Valley View service still exposes this data under its bay3 route.
-      let bayDashboardRes: Record<string, unknown> | null = null;
+      // --- In-Yard FULL Equipment: use proxied bay3 dashboard API ---
+      let bay3Res: Record<string, unknown> | null = null;
       try {
         const res = await fetch("/api/dashboard-bay5", {
           method: "POST",
@@ -813,12 +832,12 @@ export default function Bay5Report() {
           }),
         });
         if (res.ok) {
-          bayDashboardRes = await res.json() as Record<string, unknown>;
+          bay3Res = await res.json() as Record<string, unknown>;
         }
       } catch { /* dashboard API unavailable */ }
 
-      if (bayDashboardRes) {
-        const iyData = bayDashboardRes.inYardFullEquipment as Record<string, unknown> | undefined;
+      if (bay3Res) {
+        const iyData = bay3Res.inYardFullEquipment as Record<string, unknown> | undefined;
         if (iyData?.supported) {
           const allRows = (iyData.rows as Record<string, unknown>[]) || [];
 
@@ -1124,6 +1143,96 @@ export default function Bay5Report() {
       } else {
         setOrders([]);
       }
+
+      // --- Outbound Shipping: NEW load tasks with PICKED DN orders ---
+      try {
+        const loadTaskRes = await wmsPost("/wms-bam/outbound/load-task/search-by-paging", {
+          statuses: ["NEW"],
+          currentPage: 1,
+          pageSize: 50,
+        });
+        const loadTasks: Record<string, unknown>[] = loadTaskRes?.data?.list || [];
+        const shippingRows: Order[] = [];
+
+        for (const lt of loadTasks) {
+          const custId = (lt.customerId as string) || "";
+          const loadIds: string[] = (lt.loadIds as string[]) || [];
+          const entryId = (lt.entryId as string) || "";
+          const taskId = (lt.id as string) || "";
+          const dockId = (lt.dockId as string) || "";
+          const assigneeUid = (lt.assigneeUserId as string) || "";
+          const assigneeName = (lt.assigneeUserName as string) || "";
+
+          if (!custId || !loadIds.length) continue;
+
+          // Check if customer is in shipping scope (INYARD_CUSTOMERS includes Gurunanda)
+          const custName = orderMatched.find((c) => c.id === custId)?.name
+            || (custId === "ORG-655875" ? "GURUNANDA, LLC" : "");
+          const nameForScope = custName || custId;
+          if (!matchesInYardCustomerScope(nameForScope)) continue;
+
+          // Get load detail to find orderIds
+          let dnIds: string[] = [];
+          for (const loadId of loadIds.slice(0, 3)) {
+            try {
+              const loadDetailRes = await fetch(`${WMS_API}/wms-bam/outbound/load/${encodeURIComponent(loadId)}`, {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}`, "X-Tenant-ID": TENANT_ID, "X-Facility-ID": FACILITY_ID, "Item-Time-Zone": TIMEZONE },
+              });
+              if (loadDetailRes.ok) {
+                const ld = await loadDetailRes.json();
+                const detail = ld?.data || ld || {};
+                const oids: string[] = (detail.orderIds as string[]) || [];
+                dnIds.push(...oids);
+              }
+            } catch { /* skip */ }
+          }
+
+          if (dnIds.length === 0) continue;
+
+          // Check if at least one DN is PICKED
+          let hasPicked = false;
+          try {
+            for (const dnId of dnIds.slice(0, 5)) {
+              const orderDetailRes = await fetch(`${WMS_API}/wms/outbound/order/${encodeURIComponent(dnId)}`, {
+                method: "GET",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Tenant-ID": TENANT_ID, "X-Facility-ID": FACILITY_ID, "Item-Time-Zone": TIMEZONE },
+              });
+              if (orderDetailRes.ok) {
+                const od = await orderDetailRes.json();
+                const orderDetail = od?.data || od || {};
+                if (String(orderDetail.status || "").toUpperCase() === "PICKED") {
+                  hasPicked = true;
+                  break;
+                }
+              }
+            }
+          } catch { /* skip */ }
+
+          if (!hasPicked) continue;
+
+          const stableId = taskId || dnIds[0] || "";
+          const resolved = resolveAssigneeFromHistory(new Map<string, string>(), custId, nameForScope, stableId);
+          const bay5Assignee = BAY5_ASSIGNEES.find((a) => a.userId === assigneeUid);
+
+          shippingRows.push({
+            id: dnIds[0] || taskId,
+            customerId: custId,
+            customerName: nameForScope,
+            status: "PICKED",
+            loadStatus: "NEW",
+            shipMethod: "Load",
+            loadTaskId: taskId,
+            dockId,
+            location: dockId,
+            entryId,
+            assignee: bay5Assignee?.displayName || resolved?.displayName || assigneeName || "Unassigned",
+            assigneeUserId: bay5Assignee?.userId || resolved?.userId || assigneeUid || "",
+            isLiveOutbound: !!entryId,
+          });
+        }
+        setShippingLoads(shippingRows);
+      } catch { setShippingLoads([]); }
 
       setGeneratedAt(new Date());
     } catch (e: unknown) {
@@ -1479,24 +1588,54 @@ export default function Bay5Report() {
       )}
 
       {/* KPI Strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px" }}>
-        <div className="kpi-card">
-          <div className="kpi-value">{loading ? "—" : visibleReceipts.length}</div>
-          <div className="kpi-label">In-Yard FULL</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-value">{BAY5_ASSIGNEES.length}</div>
-          <div className="kpi-label">Bay 5 Assignees</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-value">{loading ? "—" : orders.length}</div>
-          <div className="kpi-label">Planned Orders</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-value">{loading ? "—" : orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; }).length}</div>
-          <div className="kpi-label">Older than 48h</div>
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+        <button type="button" onClick={() => setActiveKpi(activeKpi === "inyard" ? null : "inyard")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "inyard" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : visibleReceipts.length}</span>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>In-Yard FULL</span>
+        </button>
+        <button type="button" onClick={() => setActiveKpi(activeKpi === "allinbounds" ? null : "allinbounds")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "allinbounds" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : receipts.length}</span>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>All Inbounds</span>
+        </button>
+        <button type="button" onClick={() => setActiveKpi(activeKpi === "planned" ? null : "planned")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "planned" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : orders.length}</span>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Planned Orders</span>
+        </button>
+        <button type="button" onClick={() => setActiveKpi(activeKpi === "older48" ? null : "older48")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "older48" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; }).length}</span>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Older than 48h</span>
+        </button>
       </div>
+
+      {/* KPI Detail Panel */}
+      {activeKpi && (() => {
+        const olderThan48 = orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; });
+        const panelData: { title: string; rows: Array<{ left: string; right: string }> } =
+          activeKpi === "inyard" ? { title: `In-Yard FULL — ${visibleReceipts.length} containers`, rows: visibleReceipts.map(r => ({ left: `${r.equipmentNumber || r.containerNo || "—"} · ${r.receiptId || r.entryTicket || ""}`, right: r.customerName || r.customer || "—" })) } :
+          activeKpi === "allinbounds" ? { title: `All Inbounds — ${receipts.length} total`, rows: receipts.map(r => ({ left: `${r.equipmentNumber || r.containerNo || "—"} · ${r.receiptId || r.entryTicket || ""}`, right: r.customerName || r.customer || "—" })) } :
+          activeKpi === "planned" ? { title: `Planned Orders — ${orders.length} total`, rows: orders.slice(0, 30).map(o => ({ left: `${o.id || "—"} · ${o.customerName || ""}`, right: o.shipMethod || "Pending" })) } :
+          { title: `Older than 48h — ${olderThan48.length} orders`, rows: olderThan48.slice(0, 30).map(o => ({ left: `${o.id || "—"} · ${o.customerName || ""}`, right: formatPDT(o.createdTime) })) };
+        return (
+          <div className="section-card" style={{ border: "1px solid var(--accent)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid var(--border-table)" }}>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#f4f8ff" }}>{panelData.title}</span>
+              <button onClick={() => setActiveKpi(null)} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "14px" }}>✕</button>
+            </div>
+            {panelData.rows.length === 0 ? (
+              <div className="empty-state">No items.</div>
+            ) : (
+              <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+                {panelData.rows.map((row, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 14px", borderBottom: "1px solid var(--border-table)", fontSize: "11px" }}>
+                    <span style={{ color: "var(--fg)" }}>{row.left}</span>
+                    <span style={{ color: "var(--fg-muted)" }}>{row.right}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Main Layout: Left (tables) + Right (assignees) */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "14px", alignItems: "start" }}>
@@ -1624,7 +1763,7 @@ export default function Bay5Report() {
             ) : sortedOrders.length === 0 ? (
               <div className="empty-state">No orders match the current filters.</div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto section-scroll-10">
                 <table>
                   <thead>
                     <tr>
@@ -1701,9 +1840,74 @@ export default function Bay5Report() {
               </div>
             )}
           </section>
-        </div>
 
-        {/* Right Column - Assigned Today + Bay 5 Assignees */}
+          {/* Section 3 - Outbound Shipping (NEW loads with PICKED DNs) */}
+          {shippingLoads.length > 0 && (
+            <section className="section-card">
+              <div className="section-header">
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <h2 className="section-title">Section 3 - Outbound Shipping</h2>
+                  <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{shippingLoads.length} rows</span>
+                </div>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>DN / Order</th>
+                      <th>Customer</th>
+                      <th>DN Status</th>
+                      <th>Load Status</th>
+                      <th>Dock</th>
+                      <th>ET</th>
+                      <th>Assignee</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shippingLoads.map((row, i) => (
+                      <tr key={`ship-${row.loadTaskId || i}`}>
+                        <td className="font-mono">{row.id || "—"}</td>
+                        <td>{row.customerName || "—"}</td>
+                        <td><span style={{ padding: "2px 6px", borderRadius: "4px", fontSize: "10px", background: "rgba(0,230,138,0.1)", color: "var(--success)" }}>{row.status || "PICKED"}</span></td>
+                        <td><span style={{ padding: "2px 6px", borderRadius: "4px", fontSize: "10px", background: "rgba(77,105,255,0.1)", color: "var(--accent)" }}>{row.loadStatus || "NEW"}</span></td>
+                        <td>{row.dockId || "—"}</td>
+                        <td className="font-mono">{row.entryId || "—"}</td>
+                        <td>
+                          <select
+                            value={selectedAssignees[`ship-${row.loadTaskId || i}`] || row.assignee || ""}
+                            onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [`ship-${row.loadTaskId || i}`]: e.target.value }))}
+                            style={{ minWidth: "150px", background: "rgba(7, 20, 40, 0.92)", border: "1px solid var(--border-strong)", borderRadius: "5px", color: "#fff", padding: "4px 8px", fontSize: "11px", fontWeight: 600 }}
+                          >
+                            {BAY5_ASSIGNEES.map((a) => (
+                              <option key={a.userId} value={a.displayName}>{a.displayName}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <button
+                            className="btn-action"
+                            style={{ padding: "2px 8px", fontSize: "9px", background: row.entryId ? "rgba(0,186,124,0.12)" : "rgba(255,255,255,0.05)", color: row.entryId ? "var(--success)" : "var(--fg-muted)", borderColor: row.entryId ? "var(--success)" : "var(--border)" }}
+                            disabled={!row.entryId}
+                            title={row.entryId ? "Assign load task" : "No ET — cannot assign"}
+                            onClick={() => {
+                              if (!row.entryId) return;
+                              const selectedName = selectedAssignees[`ship-${row.loadTaskId || i}`] || row.assignee || "";
+                              const selected = BAY5_ASSIGNEES.find((a) => a.displayName === selectedName);
+                              setAssignConfirm({ row: { ...row, assignee: selected?.displayName || selectedName, assigneeUserId: selected?.userId || row.assigneeUserId }, type: "order" });
+                            }}
+                          >
+                            {row.entryId ? "Assign" : "No ET"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
           {/* Assigned Today Card */}
           <aside className="section-card">

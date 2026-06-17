@@ -235,3 +235,19 @@ input[type="search"]::placeholder { color: var(--fg-muted); }
   background: rgba(20, 150, 94, 0.94) !important;
   border-color: #53f0a6 !important;
 }
+
+.section-scroll-10 {
+  max-height: 390px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.section-scroll-10 table {
+  min-width: 100%;
+}
+
+.section-scroll-10 thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
