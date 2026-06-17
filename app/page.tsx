@@ -1945,19 +1945,8 @@ export default function Bay5Report() {
           <aside className="section-card">
             <div className="section-header">
               <h2 className="section-title">Bay 5 Assignees</h2>
-              <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{BAY5_ASSIGNEES.length} assignees</span>
             </div>
-            <div style={{ padding: "10px", display: "flex", flexDirection: "column", gap: "6px" }}>
-              {BAY5_ASSIGNEES.map((a) => {
-                const initials = a.displayName.split(" ").map((w) => w[0]).join("").toUpperCase();
-                return (
-                  <div key={a.userId} className="assignee-card">
-                    <div className="assignee-avatar">{initials}</div>
-                    <div className="assignee-name">{a.displayName}</div>
-                  </div>
-                );
-              })}
-            </div>
+            <div style={{ minHeight: "360px" }} />
           </aside>
         </div>
       </div>
