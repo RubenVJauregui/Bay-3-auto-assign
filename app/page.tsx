@@ -41,9 +41,11 @@ function getList(data: unknown): Record<string, unknown>[] {
   const candidates = [
     Array.isArray(inner) ? inner : null,
     Array.isArray((inner as Record<string, unknown> | null | undefined)?.list) ? (inner as Record<string, unknown>).list : null,
+    Array.isArray((inner as Record<string, unknown> | null | undefined)?.rows) ? (inner as Record<string, unknown>).rows : null,
     Array.isArray((inner as Record<string, unknown> | null | undefined)?.content) ? (inner as Record<string, unknown>).content : null,
     Array.isArray((inner as Record<string, unknown> | null | undefined)?.records) ? (inner as Record<string, unknown>).records : null,
     Array.isArray(obj?.list) ? obj?.list : null,
+    Array.isArray(obj?.rows) ? obj?.rows : null,
     Array.isArray(obj?.content) ? obj?.content : null,
     Array.isArray(obj?.records) ? obj?.records : null,
   ];
@@ -895,7 +897,8 @@ export default function Bay5Report() {
             };
           });
           setReceipts(mappedRows);
-          debugParts.push(`Section 1 Team 5 backend ${rows.length}`);
+          const vitaRows = mappedRows.filter((row) => matchesCustomerScope(row.customerName || row.customer, ["ALL MARKET INC / VITA COCO", "VITA COCO"]));
+          debugParts.push(`Section 1 Team 5 backend ${rows.length}, Vita Coco ${vitaRows.length}`);
         } else {
           debugParts.push(`Section 1 Team 5 backend error ${bay5Res.status}`);
         }
