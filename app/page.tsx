@@ -1138,13 +1138,11 @@ export default function Bay5Report() {
     ? receipts
     : receipts.filter((r) => !assignedByDashboard.has(r.receiptId || r.entryTicket || r.id || ""));
 
-  const receiptCustomerNames = [
-    ...new Set(visibleReceipts.map((r) => r.customerName || r.customer).filter(Boolean)),
-  ].sort() as string[];
+  const receiptCustomerNames = INYARD_CUSTOMERS;
 
   const filteredReceipts = visibleReceipts.filter((r) => {
     if (!receiptCustomerFilter) return true;
-    return (r.customerName || r.customer) === receiptCustomerFilter;
+    return matchesCustomerScope(r.customerName || r.customer, [receiptCustomerFilter]);
   });
 
   const visibleOrders = showAssignedHistory
@@ -1542,20 +1540,18 @@ export default function Bay5Report() {
                 <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{filteredReceipts.length} of {visibleReceipts.length}</span>
               </div>
             </div>
-            {receiptCustomerNames.length > 1 && (
-              <div style={{ padding: "6px 14px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
-                <span className={`filter-chip ${!receiptCustomerFilter ? "active" : ""}`} onClick={() => setReceiptCustomerFilter(null)}>All</span>
-                {receiptCustomerNames.map((name) => (
-                  <span
-                    key={name}
-                    className={`filter-chip ${receiptCustomerFilter === name ? "active" : ""}`}
-                    onClick={() => setReceiptCustomerFilter(receiptCustomerFilter === name ? null : name)}
-                  >
-                    {name}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div style={{ padding: "6px 14px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
+              <span className={`filter-chip ${!receiptCustomerFilter ? "active" : ""}`} onClick={() => setReceiptCustomerFilter(null)}>All</span>
+              {receiptCustomerNames.map((name) => (
+                <span
+                  key={name}
+                  className={`filter-chip ${receiptCustomerFilter === name ? "active" : ""}`}
+                  onClick={() => setReceiptCustomerFilter(receiptCustomerFilter === name ? null : name)}
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
             {loading ? (
               <div className="empty-state">Loading...</div>
             ) : filteredReceipts.length === 0 ? (
