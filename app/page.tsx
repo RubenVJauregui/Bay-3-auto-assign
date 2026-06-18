@@ -336,6 +336,7 @@ export default function Bay5Report() {
   const [orderSort, setOrderSort] = useState<{ col: string; dir: SortDir }>({ col: "createdTime", dir: "desc" });
   const [orderSearch, setOrderSearch] = useState("");
   const [customerFilter, setCustomerFilter] = useState<string | null>(null);
+  const [receiptCustomerFilter, setReceiptCustomerFilter] = useState<string | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [wiseDebug, setWiseDebug] = useState<string | null>(null);
   const [showAutoSuggest, setShowAutoSuggest] = useState(false);
@@ -1139,11 +1140,20 @@ export default function Bay5Report() {
     ? receipts
     : receipts.filter((r) => !assignedByDashboard.has(r.receiptId || r.entryTicket || r.id || ""));
 
+  const receiptCustomerNames = [
+    ...new Set(visibleReceipts.map((r) => r.customerName || r.customer).filter(Boolean)),
+  ].sort() as string[];
+
+  const filteredReceipts = visibleReceipts.filter((r) => {
+    if (!receiptCustomerFilter) return true;
+    return (r.customerName || r.customer) === receiptCustomerFilter;
+  });
+
   const visibleOrders = showAssignedHistory
     ? orders
     : orders.filter((o) => !assignedByDashboard.has(o.id || ""));
 
-  const sortedReceipts = [...visibleReceipts].sort((a, b) => {
+  const sortedReceipts = [...filteredReceipts].sort((a, b) => {
     const col = receiptSort.col as keyof Receipt;
     const av = (a[col] || "") as string;
     const bv = (b[col] || "") as string;
@@ -1537,12 +1547,26 @@ export default function Bay5Report() {
             <div className="section-header">
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <h2 className="section-title">Section 1 &mdash; In-Yard FULL Equipment</h2>
-                <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{visibleReceipts.length} rows</span>
+                <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{filteredReceipts.length} of {visibleReceipts.length}</span>
               </div>
             </div>
+            {receiptCustomerNames.length > 1 && (
+              <div style={{ padding: "6px 14px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                <span className={`filter-chip ${!receiptCustomerFilter ? "active" : ""}`} onClick={() => setReceiptCustomerFilter(null)}>All</span>
+                {receiptCustomerNames.map((name) => (
+                  <span
+                    key={name}
+                    className={`filter-chip ${receiptCustomerFilter === name ? "active" : ""}`}
+                    onClick={() => setReceiptCustomerFilter(receiptCustomerFilter === name ? null : name)}
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            )}
             {loading ? (
               <div className="empty-state">Loading...</div>
-            ) : visibleReceipts.length === 0 ? (
+            ) : filteredReceipts.length === 0 ? (
               <div className="empty-state">No in-yard FULL equipment matched the Bay 5 scope.</div>
             ) : (
               <div className="overflow-x-auto section-scroll-10 section-1-scroll">
