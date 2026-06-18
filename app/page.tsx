@@ -156,8 +156,6 @@ function resolveAssigneeFromHistory(historyMap: Map<string, string>, customerId?
 const DASHBOARD_API = "https://wms-valley-view-dashboard-68cacf.coolify.item.pub";
 
 const REFRESH_INTERVAL_SEC = 300;
-const BUILD_LABEL = "Bay 5 WISE fix v2";
-
 interface Receipt {
   id?: string;
   equipmentNumber?: string;
@@ -1320,12 +1318,6 @@ export default function Bay5Report() {
         <span>Auto Suggest holds RNs and orders until Auto Assign is confirmed</span>
         <span>Auto Assign assigns new tasks only after confirmation</span>
       </div>
-
-      {wiseDebug && (
-        <div style={{ padding: "10px 14px", background: "rgba(255, 210, 77, 0.14)", border: "1px solid rgba(255, 210, 77, 0.5)", borderRadius: "6px", fontSize: "13px", color: "#ffe59b", fontWeight: 700 }}>
-          Debug WISE check ({BUILD_LABEL}): {wiseDebug}
-        </div>
-      )}
 
       {dataError && (
         <div style={{ padding: "8px 14px", background: "rgba(255,76,106,0.08)", border: "1px solid rgba(255,76,106,0.25)", borderRadius: "6px", fontSize: "11px", color: "var(--warning)" }}>
