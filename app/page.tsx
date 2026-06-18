@@ -97,17 +97,16 @@ const OUTBOUND_SHIPPING_CUSTOMERS = [
 ];
 
 const BAY5_ASSIGNEES = [
-  { displayName: "Daniel Beltran", username: "Angel84daniel@icloud.com", userId: "1932077596691410945" },
-  { displayName: "Arnulfo Munguia", username: "amunguia", userId: "89" },
-  { displayName: "Lorenzo Rodriguez", username: "employee23RK", userId: "1944915385434632193" },
-  { displayName: "Julio Alvarado", username: "wilevans", userId: "4793" },
-  { displayName: "Ramon Sicairos", username: "rmorales", userId: "1015" },
-  { displayName: "Renato Rosales", username: "employee251G", userId: "1944915722677645314" },
-  { displayName: "David Martinez", username: "dmartinez", userId: "1562" },
-  { displayName: "Jose Rosas", username: "employee13VF", userId: "1912952560211685378" },
-  { displayName: "Sebastian Munguia", username: "semunguia", userId: "1853651235951436835" },
-  { displayName: "RUBI MANUEL SANDOVAL", username: "mramirez", userId: "9233" },
-  { displayName: "SEBASTIAN GONZALEZ", username: "rojiblancogonzalez@gmail.com", userId: "1932554036460883969" },
+  { displayName: "Sonny Pacho", username: "spachotemp", userId: "spachotemp" },
+  { displayName: "Gabriel Munguia", username: "gmunguia", userId: "gmunguia" },
+  { displayName: "Sandra Lopez", username: "sandralopez", userId: "sandralopez" },
+  { displayName: "Armando Martinez", username: "armmpalafox", userId: "armmpalafox" },
+  { displayName: "Luis Fernando Ozuna", username: "employee876472", userId: "employee876472" },
+  { displayName: "William Bustos", username: "21BO", userId: "21BO" },
+  { displayName: "Berni Yeyner", username: "beryeyner", userId: "beryeyner" },
+  { displayName: "Leonardo Cordero", username: "lcordero", userId: "lcordero" },
+  { displayName: "Byron Paladines", username: "bpaladines", userId: "bpaladines" },
+  { displayName: "Isarael Sanchez", username: "no bash yet", userId: "no bash yet" },
 ];
 
 interface Assignee {
