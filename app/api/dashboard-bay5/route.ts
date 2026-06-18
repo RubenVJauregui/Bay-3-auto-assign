@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const tenantId = req.headers.get("x-tenant-id") || "";
     const body = await req.json();
 
-    const res = await fetch(`${DASHBOARD_API}/api/dashboard/bay3`, {
+    const res = await fetch(`${DASHBOARD_API}/api/dashboard/bay5`, {
       method: "POST",
       cache: "no-store",
       headers: {

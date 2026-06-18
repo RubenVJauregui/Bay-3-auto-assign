@@ -857,101 +857,49 @@ export default function Bay5Report() {
     try {
       // --- Section 1: fetch fresh non-closed in-yard receipts directly from WISE ---
       setReceipts([]);
-      // --- Section 1 WISE receipt search for Bay 5 customers ---
+      // --- Section 1: follow Valley View Team 5 backend logic exactly ---
       try {
-        const supplementRes = await fetch(`${WMS_API}/wms/inbound/receipt/search-by-paging`, {
+        const bay5Res = await fetch("/api/dashboard-bay5", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
             "X-Tenant-ID": TENANT_ID,
-            "X-Facility-ID": FACILITY_ID,
-            "Item-Time-Zone": TIMEZONE,
           },
           body: JSON.stringify({
-            excludeStatuses: ["CLOSED", "FORCE_CLOSED", "TASK_COMPLETED", "CANCELLED"],
-            currentPage: 1,
-            pageSize: 500,
+            facilityId: FACILITY_ID,
+            facilityName: "Valley View",
+            timeZone: TIMEZONE,
           }),
         });
-        if (supplementRes.ok) {
-          const suppData = await supplementRes.json();
-          const suppItems: Record<string, unknown>[] = getList(suppData);
-          const existingContainers = new Set<string>();
-          const existingRNs = new Set<string>();
-
-          const supplementRows: Receipt[] = [];
-          for (const r of suppItems) {
-            const container = (r.containerNo as string) || "";
-            const rnId = (r.id as string) || "";
-            const custName = (r.customerName as string) || "";
-            const devannedTime = (r.devannedTime as string) || null;
-            const entryId = (r.entryId as string) || "";
-            if (!container || container.length < 6) continue;
-            if (!entryId) continue;
-            if (!matchesInYardCustomerScope(custName)) continue;
-            const devanned = Boolean(r.devannedTime || r.devanTime || r.devannedWhen || r.isDevanned === true);
-            if (devanned) continue;
-            if (existingContainers.has(container) || existingRNs.has(rnId)) continue;
-            if (devannedTime) continue;
-
-            const stableId = rnId || container;
-            const resolved = resolveAssignee(custName, stableId);
-            supplementRows.push({
-              equipmentNumber: container,
-              equipmentType: "Container",
-              entryTicket: entryId,
-              receiptId: rnId,
-              dockId: (r.dockId as string) || "",
-              checkIn: "",
-              timeInYard: "",
-              customer: custName,
-              customerName: custName,
-              location: (r.dockName as string) || "",
-              status: (r.status as string) || "OPEN",
-              details: "",
-              id: entryId || rnId,
-              containerNo: container,
+        if (bay5Res.ok) {
+          const bay5Data = await bay5Res.json();
+          const rows = getList(bay5Data?.inYardFullEquipment || {});
+          const mappedRows: Receipt[] = rows.map((r) => {
+            const equipmentNumber = String(r.equipmentNumber || "");
+            const entryTicket = String(r.entryTicket || "");
+            const customer = String(r.customer || r.customerName || "");
+            const stableId = entryTicket || equipmentNumber;
+            const resolved = resolveAssignee(customer, stableId);
+            return {
+              equipmentNumber,
+              entryTicket,
+              checkIn: String(r.checkIn || ""),
+              timeInYard: String(r.timeInYard || ""),
+              customer,
+              customerName: customer,
+              id: stableId,
+              containerNo: equipmentNumber,
               assignee: resolved?.displayName || "Unassigned",
               assigneeUserId: resolved?.userId || "",
-            });
-            existingContainers.add(container);
-          }
-
-          // Fetch checkInEndTime for supplemental rows that have entryTicket
-          if (supplementRows.length > 0) {
-            const etHeaders = {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-              "X-Tenant-ID": TENANT_ID,
-              "X-Facility-ID": FACILITY_ID,
-              "Item-Time-Zone": TIMEZONE,
             };
-            await Promise.all(
-              supplementRows.map(async (row) => {
-                if (!row.entryTicket) return;
-                try {
-                  const etRes = await fetch(`${WMS_API}/wms-bam/entry-ticket/${encodeURIComponent(row.entryTicket)}`, {
-                    method: "GET",
-                    headers: etHeaders,
-                    cache: "no-store",
-                  });
-                  if (etRes.ok) {
-                    const etData = await etRes.json();
-                    const detail = etData?.data || etData || {};
-                    const checkInEnd = (detail.checkInEndTime as string) || (detail.checkInStartTime as string) || "";
-                    if (checkInEnd) row.checkIn = checkInEnd;
-                  }
-                } catch { /* skip, checkIn stays empty */ }
-              })
-            );
-          }
-          setReceipts(supplementRows);
-          debugParts.push(`Section 1 WISE ${suppItems.length}, Bay 5 ${supplementRows.length}`);
+          });
+          setReceipts(mappedRows);
+          debugParts.push(`Section 1 Team 5 backend ${rows.length}`);
         } else {
-          debugParts.push(`Section 1 WISE error ${supplementRes.status}`);
+          debugParts.push(`Section 1 Team 5 backend error ${bay5Res.status}`);
         }
-      } catch { debugParts.push("Section 1 WISE failed"); }
+      } catch { debugParts.push("Section 1 Team 5 backend failed"); }
 
       // --- Planned Orders: resolve customer IDs then fetch orders ---
       const allCustomers: Customer[] = [];
