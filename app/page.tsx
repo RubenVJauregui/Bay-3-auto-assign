@@ -324,6 +324,8 @@ export default function Bay5Report() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [allInboundCount, setAllInboundCount] = useState(0);
+  const [allInboundRows, setAllInboundRows] = useState<Receipt[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [shippingLoads, setShippingLoads] = useState<Order[]>([]);
   const [inYardCustomers, setInYardCustomers] = useState<Customer[]>([]);
@@ -808,6 +810,8 @@ export default function Bay5Report() {
     localStorage.removeItem("bay5_token");
     setToken(null);
     setReceipts([]);
+    setAllInboundCount(0);
+    setAllInboundRows([]);
     setOrders([]);
     setShippingLoads([]);
     setInYardCustomers([]);
@@ -875,7 +879,8 @@ export default function Bay5Report() {
         });
         if (bay5Res.ok) {
           const bay5Data = await bay5Res.json();
-          const rows = getList(bay5Data?.inYardFullEquipment || {});
+          const inboundSection = bay5Data?.inYardFullEquipment || {};
+          const rows = getList(inboundSection);
           const mappedRows: Receipt[] = rows.map((r) => {
             const equipmentNumber = String(r.equipmentNumber || "");
             const entryTicket = String(r.entryTicket || "");
@@ -896,12 +901,17 @@ export default function Bay5Report() {
             };
           });
           setReceipts(mappedRows);
+          const candidateCount = Number((inboundSection as Record<string, unknown>)?.candidateCount);
+          setAllInboundRows(mappedRows);
+          setAllInboundCount(Number.isFinite(candidateCount) && candidateCount >= mappedRows.length ? candidateCount : mappedRows.length);
           const vitaRows = mappedRows.filter((row) => matchesCustomerScope(row.customerName || row.customer, ["ALL MARKET INC / VITA COCO", "VITA COCO"]));
           debugParts.push(`Section 1 Team 5 backend ${rows.length}, Vita Coco ${vitaRows.length}`);
         } else {
+          setAllInboundCount(0);
+          setAllInboundRows([]);
           debugParts.push(`Section 1 Team 5 backend error ${bay5Res.status}`);
         }
-      } catch { debugParts.push("Section 1 Team 5 backend failed"); }
+      } catch { setAllInboundCount(0); setAllInboundRows([]); debugParts.push("Section 1 Team 5 backend failed"); }
 
       // --- Planned Orders: resolve customer IDs then fetch orders ---
       const allCustomers: Customer[] = [];
@@ -1485,7 +1495,7 @@ export default function Bay5Report() {
           <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>In-Yard FULL</span>
         </button>
         <button type="button" onClick={() => setActiveKpi(activeKpi === "allinbounds" ? null : "allinbounds")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "allinbounds" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
-          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : receipts.length}</span>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : allInboundCount}</span>
           <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>All Inbounds</span>
         </button>
         <button type="button" onClick={() => setActiveKpi(activeKpi === "planned" ? null : "planned")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "planned" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
@@ -1503,7 +1513,7 @@ export default function Bay5Report() {
         const olderThan48 = orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; });
         const panelData: { title: string; rows: Array<{ left: string; right: string }> } =
           activeKpi === "inyard" ? { title: `In-Yard FULL — ${visibleReceipts.length} containers`, rows: visibleReceipts.map(r => ({ left: `${r.equipmentNumber || r.containerNo || "—"} · ${r.receiptId || r.entryTicket || ""}`, right: r.customerName || r.customer || "—" })) } :
-          activeKpi === "allinbounds" ? { title: `All Inbounds — ${receipts.length} total`, rows: receipts.map(r => ({ left: `${r.equipmentNumber || r.containerNo || "—"} · ${r.receiptId || r.entryTicket || ""}`, right: r.customerName || r.customer || "—" })) } :
+          activeKpi === "allinbounds" ? { title: `All Inbounds — ${allInboundCount} total`, rows: allInboundRows.map(r => ({ left: `${r.equipmentNumber || r.containerNo || "—"} · ${r.receiptId || r.entryTicket || ""}`, right: r.customerName || r.customer || "—" })) } :
           activeKpi === "planned" ? { title: `Planned Orders — ${orders.length} total`, rows: orders.slice(0, 30).map(o => ({ left: `${o.id || "—"} · ${o.customerName || ""}`, right: o.shipMethod || "Pending" })) } :
           { title: `Older than 48h — ${olderThan48.length} orders`, rows: olderThan48.slice(0, 30).map(o => ({ left: `${o.id || "—"} · ${o.customerName || ""}`, right: formatPDT(o.createdTime) })) };
         return (
