@@ -1201,6 +1201,7 @@ export default function Bay5Report() {
       visibleReceipts.filter((r) => matchesCustomerScope(r.customerName || r.customer, [name])).length,
     ])
   );
+  const receiptCustomersWithRows = receiptCustomerNames.filter((name) => (receiptCustomerCounts.get(name) || 0) > 0);
 
   const filteredReceipts = visibleReceipts.filter((r) => {
     if (!receiptCustomerFilter) return true;
@@ -1328,6 +1329,7 @@ export default function Bay5Report() {
       visibleOrders.filter((o) => o.customerName === name).length,
     ])
   );
+  const orderCustomersWithRows = uniqueCustomerNames.filter((name) => (orderCustomerCounts.get(name) || 0) > 0);
 
   return (
     <div style={{ maxWidth: "1500px", margin: "0 auto", padding: "12px 20px 30px", position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -1610,7 +1612,7 @@ export default function Bay5Report() {
             </div>
             <div style={{ padding: "6px 14px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
               <span className={`filter-chip ${!receiptCustomerFilter ? "active" : ""}`} onClick={() => setReceiptCustomerFilter(null)}>All</span>
-              {receiptCustomerNames.map((name) => (
+              {receiptCustomersWithRows.map((name) => (
                 <span
                   key={name}
                   className={`filter-chip ${receiptCustomerFilter === name ? "active" : ""}`}
@@ -1720,10 +1722,10 @@ export default function Bay5Report() {
               </div>
             </div>
 
-            {uniqueCustomerNames.length > 1 && (
+            {orderCustomersWithRows.length > 1 && (
               <div style={{ padding: "6px 14px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
                 <span className={`filter-chip ${!customerFilter ? "active" : ""}`} onClick={() => setCustomerFilter(null)}>All</span>
-                {uniqueCustomerNames.map((name) => (
+                {orderCustomersWithRows.map((name) => (
                   <span key={name} className={`filter-chip ${customerFilter === name ? "active" : ""}`} onClick={() => setCustomerFilter(customerFilter === name ? null : name)}>
                     {name} <span style={{ opacity: 0.75 }}>{orderCustomerCounts.get(name) || 0}</span>
                   </span>
