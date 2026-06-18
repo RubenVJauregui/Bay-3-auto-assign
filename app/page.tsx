@@ -58,11 +58,13 @@ function isFullInboundWithoutEt(row: Record<string, unknown>): boolean {
   const status = String(row.status || row.equipmentStatus || "").toUpperCase();
   const operationStatus = String(row.equipmentOperationStatus || row.operationStatus || row.details || "").toUpperCase();
   const entryId = String(row.entryId || row.entryTicket || row.checkInEntry || "").trim();
+  const customer = String(row.customerName || row.customer || "");
   const devanned = Boolean(row.devannedTime || row.devanTime || row.devannedWhen || row.isDevanned === true);
 
   if (!equipmentNo || equipmentNo.length < 6) return false;
   if (entryId) return false;
   if (devanned) return false;
+  if (!matchesInYardCustomerScope(customer)) return false;
   if (equipmentType && !equipmentType.includes("CONTAINER")) return false;
   return status.includes("FULL") || operationStatus.includes("FULL") || String(row.loaded || "").toLowerCase() === "true";
 }
