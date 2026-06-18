@@ -1920,7 +1920,21 @@ export default function Bay5Report() {
             <div className="section-header">
               <h2 className="section-title">Bay 5 Assignees</h2>
             </div>
-            <div style={{ minHeight: "360px" }} />
+            <div style={{ padding: "8px", minHeight: "360px", display: "flex", flexDirection: "column", gap: "6px" }}>
+              {BAY5_ASSIGNEES.map((a) => (
+                <div key={a.userId} className="assignee-card">
+                  <div className="assignee-avatar">
+                    {a.displayName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="assignee-name">{a.displayName}</div>
+                    <div style={{ fontSize: "10px", color: "var(--fg-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {a.username}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </aside>
         </div>
       </div>
