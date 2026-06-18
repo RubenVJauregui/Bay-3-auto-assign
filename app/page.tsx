@@ -154,6 +154,7 @@ function resolveAssigneeFromHistory(historyMap: Map<string, string>, customerId?
 const DASHBOARD_API = "https://wms-valley-view-dashboard-68cacf.coolify.item.pub";
 
 const REFRESH_INTERVAL_SEC = 300;
+const BUILD_LABEL = "Bay 5 WISE fix v2";
 
 interface Receipt {
   id?: string;
@@ -1361,7 +1362,7 @@ export default function Bay5Report() {
 
       {wiseDebug && (
         <div style={{ padding: "10px 14px", background: "rgba(255, 210, 77, 0.14)", border: "1px solid rgba(255, 210, 77, 0.5)", borderRadius: "6px", fontSize: "13px", color: "#ffe59b", fontWeight: 700 }}>
-          Debug WISE check: {wiseDebug}
+          Debug WISE check ({BUILD_LABEL}): {wiseDebug}
         </div>
       )}
 
