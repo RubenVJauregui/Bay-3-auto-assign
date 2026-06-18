@@ -52,6 +52,21 @@ function getList(data: unknown): Record<string, unknown>[] {
   return (candidates.find(Boolean) || []) as Record<string, unknown>[];
 }
 
+function isFullInboundWithoutEt(row: Record<string, unknown>): boolean {
+  const equipmentNo = String(row.containerNo || row.equipmentNumber || row.equipmentNo || "").trim();
+  const equipmentType = String(row.equipmentType || row.type || "").toUpperCase();
+  const status = String(row.status || row.equipmentStatus || "").toUpperCase();
+  const operationStatus = String(row.equipmentOperationStatus || row.operationStatus || row.details || "").toUpperCase();
+  const entryId = String(row.entryId || row.entryTicket || row.checkInEntry || "").trim();
+  const devanned = Boolean(row.devannedTime || row.devanTime || row.devannedWhen || row.isDevanned === true);
+
+  if (!equipmentNo || equipmentNo.length < 6) return false;
+  if (entryId) return false;
+  if (devanned) return false;
+  if (equipmentType && !equipmentType.includes("CONTAINER")) return false;
+  return status.includes("FULL") || operationStatus.includes("FULL") || String(row.loaded || "").toLowerCase() === "true";
+}
+
 
 const PLANNED_ORDER_CUSTOMERS = [
   "ALL MARKET INC / VITA COCO",
@@ -901,9 +916,6 @@ export default function Bay5Report() {
             };
           });
           setReceipts(mappedRows);
-          const candidateCount = Number((inboundSection as Record<string, unknown>)?.candidateCount);
-          setAllInboundRows(mappedRows);
-          setAllInboundCount(Number.isFinite(candidateCount) && candidateCount >= mappedRows.length ? candidateCount : mappedRows.length);
           const vitaRows = mappedRows.filter((row) => matchesCustomerScope(row.customerName || row.customer, ["ALL MARKET INC / VITA COCO", "VITA COCO"]));
           debugParts.push(`Section 1 Team 5 backend ${rows.length}, Vita Coco ${vitaRows.length}`);
         } else {
@@ -912,6 +924,38 @@ export default function Bay5Report() {
           debugParts.push(`Section 1 Team 5 backend error ${bay5Res.status}`);
         }
       } catch { setAllInboundCount(0); setAllInboundRows([]); debugParts.push("Section 1 Team 5 backend failed"); }
+
+      try {
+        const inboundRes = await apiFetch("/wms-bam/inbound/receipt/search-by-paging", {
+          excludeStatuses: ["CLOSED", "FORCE_CLOSED", "TASK_COMPLETED", "CANCELLED"],
+          currentPage: 1,
+          pageSize: 500,
+        });
+        const inboundItems = getList(inboundRes);
+        const allInbound = inboundItems
+          .filter(isFullInboundWithoutEt)
+          .map((r) => {
+            const equipmentNumber = String(r.containerNo || r.equipmentNumber || r.equipmentNo || "");
+            const customer = String(r.customerName || r.customer || "");
+            return {
+              equipmentNumber,
+              containerNo: equipmentNumber,
+              receiptId: String(r.id || ""),
+              id: String(r.id || equipmentNumber),
+              customer,
+              customerName: customer,
+              status: String(r.status || "FULL"),
+              location: String(r.dockName || r.locationName || r.location || r.dockId || ""),
+            } as Receipt;
+          });
+        setAllInboundRows(allInbound);
+        setAllInboundCount(allInbound.length);
+        debugParts.push(`All Inbounds full no ET ${allInbound.length}`);
+      } catch {
+        setAllInboundRows([]);
+        setAllInboundCount(0);
+        debugParts.push("All Inbounds failed");
+      }
 
       // --- Planned Orders: resolve customer IDs then fetch orders ---
       const allCustomers: Customer[] = [];
