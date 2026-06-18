@@ -251,3 +251,7 @@ input[type="search"]::placeholder { color: var(--fg-muted); }
   top: 0;
   z-index: 2;
 }
+
+.section-1-scroll {
+  max-height: 390px;
+}

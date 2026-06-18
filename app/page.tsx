@@ -1545,7 +1545,7 @@ export default function Bay5Report() {
             ) : visibleReceipts.length === 0 ? (
               <div className="empty-state">No in-yard FULL equipment matched the Bay 5 scope.</div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto section-scroll-10 section-1-scroll">
                 <table>
                   <thead>
                     <tr>
