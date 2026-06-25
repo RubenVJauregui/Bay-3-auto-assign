@@ -25,20 +25,6 @@ const INYARD_CUSTOMERS = [
   "the only bean",
 ];
 
-// Statuses that indicate a receipt/task/entry is no longer active and should not appear
-// in the actionable dashboard. Normalized to uppercase for comparison.
-const INACTIVE_STATUSES = new Set([
-  "CLOSED",
-  "FORCE_CLOSED",
-  "CANCELLED",
-  "TASK_COMPLETED",
-]);
-
-function isInactiveStatus(status?: string): boolean {
-  if (!status) return false;
-  return INACTIVE_STATUSES.has(status.toUpperCase().trim());
-}
-
 function matchesInYardCustomerScope(name?: string): boolean {
   const normalized = String(name || "").toLowerCase().replace(/[.,]/g, "").trim();
   if (!normalized) return false;
@@ -167,47 +153,6 @@ interface Receipt {
   assignee?: string;
   assigneeUserId?: string;
 }
-
-interface LookupResult {
-  containerNo: string;
-  entryTicket: string;
-  receiptId: string;
-  equipmentId: string;
-  dockId: string;
-  dockName: string;
-  etStatus: string;
-  receiptStatus: string;
-  taskId: string;
-  taskStatus: string;
-  taskDockId: string;
-  taskAssigneeUserId: string;
-  taskAssigneeName: string;
-  customerName: string;
-}
-
-const WORKFLOW_CASES = [
-  {
-    id: "oneu6407746",
-    container: "ONEU6407746",
-    title: "Dock Check In — dock mismatch fix",
-    et: "ET-1112740", rn: "RN-5008175", task: "TASK-5299774", dock: "DOCK43 (543)",
-    pattern: "Verificar ET/RN/task, comparar dock WMS vs YMS/WISE, liberar dock stale si es seguro, reconciliar ET/task al dock correcto. No crear receive tasks manuales.",
-  },
-  {
-    id: "csgu7067706",
-    container: "CSGU7067706",
-    title: "Receive Now / Window Check-in",
-    et: "ET-1113191", rn: "RN-5008007", task: "TASK-5300270", dock: "DOCK46 (561)",
-    pattern: "Buscar ET/RN/equipmentId, Receive Now, asignar assignee/dock, procesar Check In. Status: WINDOW_CHECKED_IN.",
-  },
-  {
-    id: "csnu6594424",
-    container: "CSNU6594424",
-    title: "Assignee + duplicate receipt fix",
-    et: "ET-1113366", rn: "RN-5008292", task: "TASK-5300284", dock: "DOCK47 (557)",
-    pattern: "Asignar header y steps internos al mismo usuario (mamunguia/732). Limpiar referencia duplicada de receipt para que el Receive Task aparezca una sola vez.",
-  },
-];
 
 interface Order {
   id?: string;
@@ -373,12 +318,6 @@ export default function Bay3Report() {
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [lookupQuery, setLookupQuery] = useState("");
-  const [lookupResult, setLookupResult] = useState<LookupResult | null>(null);
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupError, setLookupError] = useState<string | null>(null);
-  const [expandedCase, setExpandedCase] = useState<string | null>(null);
-
   useEffect(() => {
     setAssignedByDashboard(getAssignedSet());
     fetchSharedAssignedToday().then((records) => setAssignedTodayList(records));
@@ -432,61 +371,12 @@ export default function Bay3Report() {
     return res.json();
   }, [token]);
 
-  // Refresh entry ticket state to get verified current dock — prevents using stale/wrong dockId
-  // that causes downstream Check In errors (e.g. TXGU8156852 scenario where WMS had DOCK47 but
-  // YMS had DOCK157 due to stale data at task creation time).
-  const refreshEntryTicketState = useCallback(async (etId: string, containerNo?: string): Promise<{
-    verifiedDockId: string;
-    verifiedDockName: string;
-    etStatus: string;
-    receiptId: string;
-  } | null> => {
-    if (!etId || !token) return null;
-    try {
-      const res = await fetch(`${WMS_API}/wms-bam/entry-ticket/${encodeURIComponent(etId)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "X-Tenant-ID": TENANT_ID,
-          "X-Facility-ID": FACILITY_ID,
-          "Item-Time-Zone": TIMEZONE,
-        },
-        cache: "no-store",
-      });
-      if (!res.ok) return null;
-      const json = await res.json();
-      const detail = json?.data || json || {};
-      const etStatus = String(detail.status || "").toUpperCase();
-
-      const actions: Record<string, unknown>[] = Array.isArray(detail.equipmentActions) ? detail.equipmentActions : [];
-      const action = actions.find((a) => {
-        const eqNo = String(a.equipmentNo || a.containerNo || a.trailerNo || "").trim();
-        return containerNo && eqNo === containerNo;
-      }) || actions.find((a) => Array.isArray(a.receiptIds) && (a.receiptIds as unknown[]).length > 0);
-
-      const actionReceiptIds: string[] = Array.isArray(action?.receiptIds) ? action.receiptIds as string[] : [];
-      const detailReceipts: Record<string, unknown>[] = Array.isArray(detail.receipts) ? detail.receipts : [];
-      const matchingReceipt = detailReceipts.find((x) => String(x.containerNo || x.equipmentNo || "") === containerNo)
-        || detailReceipts.find((x) => actionReceiptIds.includes(String(x.id || "")))
-        || detailReceipts[0];
-
-      const verifiedDockId = String(action?.currentLocationId || detail.dockId || matchingReceipt?.dockId || "");
-      const verifiedDockName = String(action?.currentLocationName || detail.dockName || matchingReceipt?.dockName || "");
-      const receiptId = actionReceiptIds[0] || String(matchingReceipt?.id || "");
-
-      return { verifiedDockId, verifiedDockName, etStatus, receiptId };
-    } catch {
-      return null;
-    }
-  }, [token]);
-
   const assignInYardRow = useCallback(async (row: Receipt): Promise<{ ok: boolean; msg: string }> => {
     const etId = row.entryTicket || row.id || "";
     const containerNo = row.equipmentNumber || row.containerNo || "";
     let rnId = row.receiptId || "";
     const userId = row.assigneeUserId || "";
-    const rowDockId = row.dockId || "";
+    const dockId = row.dockId || "";
     const displayLabel = rnId ? `${containerNo} | ${rnId}` : (containerNo || etId);
 
     if (!userId) return { ok: false, msg: `No assignee selected for ${displayLabel}.` };
@@ -519,45 +409,17 @@ export default function Bay3Report() {
       taskId = taskList[0].id;
     }
 
-    // Step 3: If no task exists, create one — using VERIFIED dock from fresh ET detail
+    // Step 3: If no task exists, create one
     if (!taskId) {
-      // SAFEGUARD: Refresh entry ticket to get live dock state before task creation.
-      // Row dockId may be stale (up to 5 min old from last dashboard refresh).
-      let verifiedDockId = rowDockId;
-      if (etId) {
-        const freshState = await refreshEntryTicketState(etId, containerNo);
-        if (!freshState) {
-          return { ok: false, msg: `Cannot verify dock state for ${displayLabel}. Entry ticket ${etId} is unreachable — please retry after refresh.` };
-        }
-
-        // Block if ET is not in a checked-in state eligible for receive task creation
-        const validCheckinStatuses = ["WINDOW CHECKED IN", "DOCK CHECKED IN", "GATE CHECKED IN", "WAITING"];
-        if (freshState.etStatus && !validCheckinStatuses.some((s) => freshState.etStatus.includes(s))) {
-          return { ok: false, msg: `Cannot create receive task for ${displayLabel}. Entry ticket status is "${freshState.etStatus}" — must be checked in first.` };
-        }
-
-        // Use the verified dock from live ET detail, not stale row data
-        if (freshState.verifiedDockId) {
-          verifiedDockId = freshState.verifiedDockId;
-        }
-
-        // If fresh state has a better RN resolution, use it
-        if (freshState.receiptId && !rnId) {
-          rnId = freshState.receiptId;
-        }
-      }
-
-      if (!verifiedDockId) {
-        return { ok: false, msg: `Cannot create receive task for ${displayLabel}. No verified dock assigned — check in the entry ticket at a dock first.` };
-      }
+      if (!dockId) return { ok: false, msg: `Cannot create receive task for ${rnId}. Dock information is missing.` };
 
       const createBody: Record<string, unknown> = { receiptIds: [rnId], assigneeUserId: userId };
       if (etId) createBody.entryId = etId;
-      createBody.dockId = verifiedDockId;
+      createBody.dockId = dockId;
 
       const createRes = await wmsPost("/wms/inbound/receive-task/create", createBody);
       if (!createRes || (createRes.code !== undefined && String(createRes.code) !== "0")) {
-        return { ok: false, msg: `Could not create a receive task for ${displayLabel}. Please confirm the RN/ET is eligible in WISE.` };
+        return { ok: false, msg: `Could not create a receive task for ${rnId}. Please confirm the RN/ET is eligible in WISE.` };
       }
       const createdTask = createRes?.data;
       if (createdTask?.id) {
@@ -569,16 +431,16 @@ export default function Bay3Report() {
         const retryList = retry?.data?.list || retry?.data || [];
         if (Array.isArray(retryList) && retryList.length > 0) taskId = retryList[0].id;
       }
-      if (!taskId) return { ok: false, msg: `Could not create a receive task for ${displayLabel}. Please confirm the RN/ET is eligible in WISE.` };
+      if (!taskId) return { ok: false, msg: `Could not create a receive task for ${rnId}. Please confirm the RN/ET is eligible in WISE.` };
     }
 
     // Step 4: Assign the task
     const assignRes = await wmsPut("/wms/inbound/receive-task", { id: taskId, assigneeUserId: userId });
     if (!assignRes || (assignRes.code !== undefined && String(assignRes.code) !== "0" && assignRes.success !== true)) {
-      return { ok: false, msg: `Task found but assignment failed for ${displayLabel}. The task may already be assigned or closed.` };
+      return { ok: false, msg: `Task found but assignment failed for ${rnId}. The task may already be assigned or closed.` };
     }
     return { ok: true, msg: `${displayLabel} assigned successfully.` };
-  }, [wmsPost, wmsPut, refreshEntryTicketState]);
+  }, [wmsPost, wmsPut]);
 
   const assignOutboundRow = useCallback(async (row: Order): Promise<{ ok: boolean; msg: string }> => {
     const orderId = row.id || "";
@@ -609,7 +471,7 @@ export default function Bay3Report() {
       const taskList = searchRes?.data?.list || searchRes?.data?.content || searchRes?.data || [];
       const tasks = Array.isArray(taskList) ? taskList : [];
       return tasks
-        .filter((t: Record<string, unknown>) => !isInactiveStatus(String(t.status || "")))
+        .filter((t: Record<string, unknown>) => !["CLOSED", "FORCE_CLOSED", "CANCELLED"].includes(String(t.status || "").toUpperCase()))
         .map((t: Record<string, unknown>) => String(t.id || t.taskId || ""))
         .filter(Boolean);
     };
@@ -657,103 +519,6 @@ export default function Bay3Report() {
     return assignPickTasks(taskIds);
   }, [wmsPost, wmsPut]);
 
-  // Container lookup: read-only search by container number for workflow helper
-  const performContainerLookup = useCallback(async (query: string) => {
-    if (!token || !query.trim()) return;
-    setLookupLoading(true);
-    setLookupError(null);
-    setLookupResult(null);
-    const containerNo = query.trim().toUpperCase();
-    try {
-      // Step 1: Search receipt by container number
-      const receiptRes = await wmsPost("/wms/inbound/receipt/search-by-paging", { eqContainerNo: containerNo, currentPage: 1, pageSize: 10 });
-      const receiptList = receiptRes?.data?.list || [];
-      const receipt = Array.isArray(receiptList) && receiptList.length > 0
-        ? (receiptList.find((x: Record<string, unknown>) => String(x.containerNo || "") === containerNo) || receiptList[0])
-        : null;
-
-      const rnId = receipt ? String(receipt.id || "") : "";
-      const entryId = receipt ? String(receipt.entryId || "") : "";
-      const custName = receipt ? String(receipt.customerName || "") : "";
-      const receiptStatus = receipt ? String(receipt.status || "") : "";
-
-      // Step 2: Fetch entry ticket detail if available
-      let etStatus = "";
-      let dockId = "";
-      let dockName = "";
-      let equipmentId = "";
-      if (entryId) {
-        const etState = await refreshEntryTicketState(entryId, containerNo);
-        if (etState) {
-          etStatus = etState.etStatus;
-          dockId = etState.verifiedDockId;
-          dockName = etState.verifiedDockName;
-        }
-        // Also try to get equipmentId from ET detail
-        try {
-          const etRes = await fetch(`${WMS_API}/wms-bam/entry-ticket/${encodeURIComponent(entryId)}`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Tenant-ID": TENANT_ID, "X-Facility-ID": FACILITY_ID, "Item-Time-Zone": TIMEZONE },
-            cache: "no-store",
-          });
-          if (etRes.ok) {
-            const etJson = await etRes.json();
-            const detail = etJson?.data || etJson || {};
-            const actions: Record<string, unknown>[] = Array.isArray(detail.equipmentActions) ? detail.equipmentActions : [];
-            const action = actions.find((a) => String(a.equipmentNo || a.containerNo || "").trim() === containerNo);
-            if (action) equipmentId = String(action.equipmentId || "");
-          }
-        } catch { /* skip */ }
-      }
-
-      // Step 3: Search for existing receive task
-      let taskId = "";
-      let taskStatus = "";
-      let taskDockId = "";
-      let taskAssigneeUserId = "";
-      let taskAssigneeName = "";
-      if (rnId) {
-        const taskRes = await wmsPost("/wms/inbound/receive-task/search", { receiptIds: [rnId] });
-        const tasks = taskRes?.data?.list || taskRes?.data || [];
-        const taskArr = Array.isArray(tasks) ? tasks : [];
-        if (taskArr.length > 0) {
-          const t = taskArr[0];
-          taskId = String(t.id || "");
-          taskStatus = String(t.status || "");
-          taskDockId = String(t.dockId || "");
-          taskAssigneeUserId = String(t.assigneeUserId || "");
-          const assignee = BAY3_ASSIGNEES.find((a) => a.userId === taskAssigneeUserId);
-          taskAssigneeName = assignee?.displayName || String(t.assigneeUserName || "");
-        }
-      }
-
-      if (!receipt && !entryId) {
-        setLookupError(`No se encontró el contenedor ${containerNo}. Verifique el número.`);
-      } else {
-        setLookupResult({
-          containerNo,
-          entryTicket: entryId,
-          receiptId: rnId,
-          equipmentId,
-          dockId,
-          dockName,
-          etStatus,
-          receiptStatus,
-          taskId,
-          taskStatus,
-          taskDockId,
-          taskAssigneeUserId,
-          taskAssigneeName,
-          customerName: custName,
-        });
-      }
-    } catch {
-      setLookupError("Error de conexión al buscar el contenedor. Intente de nuevo.");
-    } finally {
-      setLookupLoading(false);
-    }
-  }, [token, wmsPost, refreshEntryTicketState]);
-
   const loadDocks = useCallback(async () => {
     if (!token || dockList.length > 0) return;
     try {
@@ -785,9 +550,8 @@ export default function Bay3Report() {
     if (!dockConfirm || !token) return;
     const { row, newDockId } = dockConfirm;
     const etId = row.entryTicket || row.id || "";
-    const containerNo = row.equipmentNumber || row.containerNo || "";
     const rnId = row.receiptId || "";
-    const displayRn = containerNo ? `${containerNo} (${rnId || etId})` : (rnId || etId);
+    const displayRn = rnId || etId;
 
     if (!etId) {
       setAssignStatus(`Cannot change dock for ${displayRn}. Entry ticket not available.`);
@@ -798,104 +562,7 @@ export default function Bay3Report() {
 
     setAssigning(true);
 
-    // ─── PREFLIGHT VALIDATION ─────────────────────────────────────────────────
-    // Before any mutation, verify: ET exists & is in a state that allows dock
-    // change, the target dock exists, and check dock occupancy status.
-    // ──────────────────────────────────────────────────────────────────────────
-
-    // 1. Refresh ET state — confirm ET is reachable and get current dock/status
-    const freshState = await refreshEntryTicketState(etId, containerNo);
-    if (!freshState) {
-      setAssigning(false);
-      setDockConfirm(null);
-      setAssignStatus(`Cannot change dock for ${displayRn}. Unable to verify entry ticket state — please retry.`);
-      setTimeout(() => setAssignStatus(null), 6000);
-      return;
-    }
-
-    // 2. If already at the same dock, no-op
-    if (freshState.verifiedDockId === newDockId) {
-      setAssigning(false);
-      setDockConfirm(null);
-      setAssignStatus(`${displayRn} is already at ${dockConfirm.newDockName}. No change needed.`);
-      setTimeout(() => setAssignStatus(null), 5000);
-      return;
-    }
-
-    // 3. Check ET status — only allow dock change for eligible statuses
-    const eligibleForDockChange = ["GATE CHECKED IN", "WINDOW CHECKED IN", "DOCK CHECKED IN", "WAITING"];
-    if (freshState.etStatus && !eligibleForDockChange.some((s) => freshState.etStatus.includes(s))) {
-      setAssigning(false);
-      setDockConfirm(null);
-      setAssignStatus(`Cannot change dock for ${displayRn}. Entry ticket status is "${freshState.etStatus}" — not eligible for dock assignment.`);
-      setTimeout(() => setAssignStatus(null), 6000);
-      return;
-    }
-
-    // 4. If ET is already Dock/Window Checked In at a DIFFERENT dock, require explicit confirmation
-    const alreadyDockedStatuses = ["DOCK CHECKED IN", "WINDOW CHECKED IN"];
-    if (freshState.verifiedDockId && freshState.verifiedDockId !== newDockId &&
-        alreadyDockedStatuses.some((s) => freshState.etStatus.includes(s))) {
-      const currentDockLabel = freshState.verifiedDockName || freshState.verifiedDockId;
-      const confirmed = window.confirm(
-        `${displayRn} is currently checked in at ${currentDockLabel}.\n\n` +
-        `Moving to ${dockConfirm.newDockName} will re-issue a window check-in.\n\n` +
-        `Only proceed if this is a deliberate dock move. Continue?`
-      );
-      if (!confirmed) {
-        setAssigning(false);
-        setDockConfirm(null);
-        setAssignStatus(`Dock change cancelled for ${displayRn}.`);
-        setTimeout(() => setAssignStatus(null), 4000);
-        return;
-      }
-    }
-
-    // 5. Check target dock occupancy via WMS dock-door-status dashboard
-    //    If occupied by a stale/closed ET, offer to force-occupy
-    let dockOccupied = false;
-    let dockOccupantInfo = "";
-    try {
-      const dockStatusRes = await wmsPost("/wms-bam/dashboard/dock-door-status/search-by-paging", { currentPage: 1, pageSize: 200 });
-      const dockStatuses = dockStatusRes?.data?.list || dockStatusRes?.data?.content || dockStatusRes?.data || [];
-      if (Array.isArray(dockStatuses)) {
-        const targetDock = dockStatuses.find((d: Record<string, unknown>) => String(d.dockId || d.id || "") === newDockId);
-        if (targetDock) {
-          const occupyStatus = String(targetDock.status || targetDock.occupyStatus || "").toUpperCase();
-          const occupantEt = String(targetDock.entryId || targetDock.entryTicketId || "");
-          if (occupyStatus === "OCCUPIED" && occupantEt && occupantEt !== etId) {
-            dockOccupied = true;
-            dockOccupantInfo = occupantEt;
-          }
-        }
-      }
-    } catch { /* dock status check failed — proceed anyway, window-checkin will reject if truly occupied */ }
-
-    if (dockOccupied) {
-      const forceConfirmed = window.confirm(
-        `${dockConfirm.newDockName} is currently occupied by entry ticket ${dockOccupantInfo}.\n\n` +
-        `This may be a stale assignment (e.g., Gate Checked Out ET still holding the dock).\n\n` +
-        `Force-assign this dock to ${displayRn}? The previous occupant will be released.`
-      );
-      if (!forceConfirmed) {
-        setAssigning(false);
-        setDockConfirm(null);
-        setAssignStatus(`Dock change cancelled — ${dockConfirm.newDockName} is occupied by ${dockOccupantInfo}.`);
-        setTimeout(() => setAssignStatus(null), 6000);
-        return;
-      }
-    }
-
-    // ─── DOCK SYNC FLOW ───────────────────────────────────────────────────────
-    // Both WMS (window-checkin) and the WMS receive task dockId must reflect the
-    // new dock for Check In to work on the handheld. The flow:
-    // Step 1: WMS window-checkin (updates entry ticket dock in WMS/BAM layer)
-    // Step 2: If a receive task exists, update its dockId via batch-update
-    // Step 3: Post-verify — refetch ET detail to confirm dock propagated
-    // REGRESSION GUARD: Local UI state is ONLY updated after verification passes.
-    // ──────────────────────────────────────────────────────────────────────────
-
-    // Find existing receive task (for Step 2)
+    // Search for existing receive task
     let taskId: string | null = null;
     const searchRes = await wmsPost("/wms/inbound/receive-task/search", { entryId: etId });
     const tasks = searchRes?.data?.list || searchRes?.data || [];
@@ -904,13 +571,13 @@ export default function Bay3Report() {
       taskId = taskList[0].id;
     }
 
-    // Step 1: WMS window-checkin
-    const checkinBody: Record<string, unknown> = {
+    // Build window-checkin body
+    const body: Record<string, unknown> = {
       entryId: etId,
       dockId: newDockId,
     };
     if (taskId || rnId) {
-      checkinBody.inboundTask = {
+      body.inboundTask = {
         ...(taskId ? { taskId, isUpdateTask: true } : {}),
         dockId: newDockId,
         receiptIds: rnId ? [rnId] : [],
@@ -918,64 +585,21 @@ export default function Bay3Report() {
       };
     }
 
-    const checkinRes = await wmsPost(`/wms-bam/entry-ticket/window-checkin/${etId}`, checkinBody);
-    const checkinOk = checkinRes && (checkinRes.code === undefined || String(checkinRes.code) === "0" || checkinRes.success === true);
-
-    if (!checkinOk) {
-      setAssigning(false);
-      setDockConfirm(null);
-      // Provide actionable message — dock may be occupied or ET ineligible
-      const errDetail = checkinRes?.message || checkinRes?.msg || "";
-      const isOccupied = errDetail.toLowerCase().includes("occupied") || errDetail.toLowerCase().includes("busy");
-      setAssignStatus(
-        isOccupied
-          ? `Could not change dock for ${displayRn}. ${dockConfirm.newDockName} appears occupied in WMS. Try releasing the dock in WISE first, or use a different dock.`
-          : `Could not change dock for ${displayRn}. WMS did not accept the window check-in — verify the entry ticket is eligible and the dock is available.`
-      );
-      setTimeout(() => setAssignStatus(null), 8000);
-      return;
-    }
-
-    // Step 2: Update receive task dockId (if task exists)
-    let taskUpdateOk = true;
-    if (taskId) {
-      const taskUpdateRes = await wmsPut("/wms/inbound/receive-task/batch-update", [{ id: taskId, dockId: newDockId }]);
-      taskUpdateOk = !!(taskUpdateRes && (taskUpdateRes.code === undefined || String(taskUpdateRes.code) === "0" || taskUpdateRes.success === true));
-    }
-
-    // Step 3: Post-verification — refetch ET and confirm dock matches
-    const verifiedState = await refreshEntryTicketState(etId, containerNo);
-    const dockConfirmed = verifiedState && verifiedState.verifiedDockId === newDockId;
-
+    const res = await wmsPost(`/wms-bam/entry-ticket/window-checkin/${etId}`, body);
     setAssigning(false);
     setDockConfirm(null);
 
-    // REGRESSION GUARD: Only update local UI state when backend verification confirms the dock
-    if (dockConfirmed && taskUpdateOk) {
-      setAssignStatus(`Dock changed to ${dockConfirm.newDockName} for ${displayRn}. Verified in WMS. ✓`);
+    if (res && (res.code === undefined || String(res.code) === "0" || res.success === true)) {
+      setAssignStatus(`Dock changed to ${dockConfirm.newDockName} for ${displayRn}.`);
+      // Update local row
       setReceipts((prev) => prev.map((r) =>
         (r.entryTicket || r.id) === etId ? { ...r, location: dockConfirm.newDockName, dockId: newDockId } : r
       ));
-    } else if (checkinOk && !taskUpdateOk) {
-      setAssignStatus(
-        `Dock assigned to ${dockConfirm.newDockName} for ${displayRn}, but the receive task dock could not be updated. ` +
-        `The handheld may still show the old dock. Please retry or update task ${taskId} in WISE manually.`
-      );
-      // Still update local state since ET is confirmed — partial success
-      setReceipts((prev) => prev.map((r) =>
-        (r.entryTicket || r.id) === etId ? { ...r, location: dockConfirm.newDockName, dockId: newDockId } : r
-      ));
-    } else if (checkinOk && !dockConfirmed) {
-      // WMS accepted but verification shows dock didn't propagate — do NOT update local state
-      setAssignStatus(
-        `Dock change sent for ${displayRn}, but WMS has not confirmed ${dockConfirm.newDockName} yet. ` +
-        `Please wait a moment and click Refresh, or verify in WISE before Check In.`
-      );
     } else {
       setAssignStatus(`Could not change dock for ${displayRn}. Please verify the RN/ET is eligible.`);
     }
-    setTimeout(() => setAssignStatus(null), 10000);
-  }, [dockConfirm, token, wmsPost, wmsPut, refreshEntryTicketState]);
+    setTimeout(() => setAssignStatus(null), 6000);
+  }, [dockConfirm, token, wmsPost]);
 
   const handleOrderDockChange = useCallback(async () => {
     if (!orderDockConfirm || !token) return;
@@ -1011,6 +635,7 @@ export default function Bay3Report() {
     setOrderDockConfirm(null);
     if (res && (res.code === undefined || String(res.code) === "0" || res.success === true)) {
       setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, dockId: newDockId, location: newDockName, loadTaskId } : o)));
+      setShippingLoads((prev) => prev.map((o) => ((o.loadTaskId === loadTaskId || o.id === orderId) ? { ...o, dockId: newDockId, location: newDockName, loadTaskId } : o)));
       setAssignStatus(`Dock changed to ${newDockName} for ${orderId}.`);
     } else {
       setAssignStatus(`Could not change dock for ${orderId}. Please verify the load task is eligible.`);
@@ -1258,12 +883,10 @@ export default function Bay3Report() {
                     || receipts.find((x: Record<string, unknown>) => actionReceiptIds.includes(String(x.id || "")))
                     || receipts[0];
                   const receiptId = actionReceiptIds[0] || String(matchingReceipt?.id || "");
-                  const receiptStatus = String(matchingReceipt?.status || "");
                   const dockId = String(action?.currentLocationId || detail.dockId || matchingReceipt?.dockId || "");
                   const dockName = String(action?.currentLocationName || detail.dockName || matchingReceipt?.dockName || "");
                   const checkInEndTime = String(detail.checkInEndTime || "");
-                  const etStatus = String(detail.status || "");
-                  if (receiptId) return { eqNum, et, receiptId, receiptStatus, etStatus, dockId, dockName, checkInEndTime };
+                  if (receiptId) return { eqNum, et, receiptId, dockId, dockName, checkInEndTime };
                 }
               } catch { /* fallback below */ }
 
@@ -1284,32 +907,21 @@ export default function Bay3Report() {
                     (!eqNum || String(x.containerNo || x.equipmentNo || "") === eqNum)
                   );
                   const chosen = exact || imported || list[0];
-                  const chosenStatus = String(chosen.status || "");
-                  return { eqNum, et, receiptId: String(chosen.id || ""), receiptStatus: chosenStatus, etStatus: "", dockId: String(chosen.dockId || ""), dockName: String(chosen.dockName || ""), checkInEndTime: "" };
+                  return { eqNum, et, receiptId: String(chosen.id || ""), dockId: String(chosen.dockId || ""), dockName: String(chosen.dockName || ""), checkInEndTime: "" };
                 }
               } catch { /* skip */ }
               return null;
             })
           );
-          const rnMap = new Map<string, { receiptId: string; receiptStatus: string; etStatus: string; dockId: string; dockName: string; checkInEndTime: string }>();
+          const rnMap = new Map<string, { receiptId: string; dockId: string; dockName: string; checkInEndTime: string }>();
           for (const item of rnLookups) {
-            if (item) rnMap.set(item.et, { receiptId: item.receiptId, receiptStatus: item.receiptStatus, etStatus: item.etStatus, dockId: item.dockId, dockName: item.dockName, checkInEndTime: item.checkInEndTime });
+            if (item) rnMap.set(item.et, { receiptId: item.receiptId, dockId: item.dockId, dockName: item.dockName, checkInEndTime: item.checkInEndTime });
           }
 
           const enriched: Receipt[] = rows
             .filter((r) => {
               const eqType = ((r.equipmentType as string) || "").toLowerCase();
               return eqType.includes("container") || (!eqType.includes("trailer") && !eqType.includes("tractor"));
-            })
-            .filter((r) => {
-              // Exclude rows whose receipt or entry ticket is in an inactive/closed state
-              const et = (r.entryTicket as string) || "";
-              const rnInfo = rnMap.get(et);
-              if (rnInfo?.receiptStatus && isInactiveStatus(rnInfo.receiptStatus)) return false;
-              if (rnInfo?.etStatus && isInactiveStatus(rnInfo.etStatus)) return false;
-              const rowStatus = (r.status as string) || "";
-              if (isInactiveStatus(rowStatus)) return false;
-              return true;
             })
             .map((r) => {
             const custName = (r.customer as string) || "—";
@@ -1383,11 +995,9 @@ export default function Bay3Report() {
             const custName = (r.customerName as string) || "";
             const devannedTime = (r.devannedTime as string) || null;
             const entryId = (r.entryId as string) || "";
-            const receiptStatus = (r.status as string) || "";
             if (!container || container.length < 6) continue;
             if (!entryId) continue;
             if (!matchesInYardCustomerScope(custName)) continue;
-            if (isInactiveStatus(receiptStatus)) continue;
             const devanned = Boolean(r.devannedTime || r.devanTime || r.devannedWhen || r.isDevanned === true);
             if (devanned) continue;
             if (existingContainers.has(container) || existingRNs.has(rnId)) continue;
@@ -1623,7 +1233,7 @@ export default function Bay3Report() {
             isLiveOutbound: !!entryId,
           });
         }
-        setShippingLoads(shippingRows.filter((r) => !isInactiveStatus(r.status) && !isInactiveStatus(r.loadStatus)));
+        setShippingLoads(shippingRows);
       } catch { setShippingLoads([]); }
 
       setGeneratedAt(new Date());
@@ -1659,12 +1269,12 @@ export default function Bay3Report() {
   }, [token, fetchData]);
 
   const visibleReceipts = showAssignedHistory
-    ? receipts.filter((r) => !isInactiveStatus(r.status))
-    : receipts.filter((r) => !assignedByDashboard.has(r.receiptId || r.entryTicket || r.id || "") && !isInactiveStatus(r.status));
+    ? receipts
+    : receipts.filter((r) => !assignedByDashboard.has(r.receiptId || r.entryTicket || r.id || ""));
 
   const visibleOrders = showAssignedHistory
-    ? orders.filter((o) => !isInactiveStatus(o.status))
-    : orders.filter((o) => !assignedByDashboard.has(o.id || "") && !isInactiveStatus(o.status));
+    ? orders
+    : orders.filter((o) => !assignedByDashboard.has(o.id || ""));
 
   const sortedReceipts = [...visibleReceipts].sort((a, b) => {
     const col = receiptSort.col as keyof Receipt;
@@ -2234,14 +1844,18 @@ export default function Bay3Report() {
           </section>
 
           {/* Section 3 - Outbound Shipping (NEW loads with PICKED DNs) */}
-          {shippingLoads.length > 0 && (
-            <section className="section-card">
-              <div className="section-header">
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <h2 className="section-title">Section 3 - Outbound Shipping</h2>
-                  <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{shippingLoads.length} rows</span>
-                </div>
+          <section className="section-card">
+            <div className="section-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <h2 className="section-title">Section 3 - Outbound Shipping</h2>
+                <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{shippingLoads.length} rows</span>
               </div>
+            </div>
+            {loading ? (
+              <div className="empty-state">Loading outbound shipping...</div>
+            ) : shippingLoads.length === 0 ? (
+              <div className="empty-state">No outbound shipping loads available right now.</div>
+            ) : (
               <div style={{ overflowX: "auto" }}>
                 <table>
                   <thead>
@@ -2257,18 +1871,52 @@ export default function Bay3Report() {
                     </tr>
                   </thead>
                   <tbody>
-                    {shippingLoads.map((row, i) => (
-                      <tr key={`ship-${row.loadTaskId || i}`}>
+                    {shippingLoads.map((row, i) => {
+                      const shipKey = `ship-${row.loadTaskId || row.id || i}`;
+                      const currentDockId = row.dockId || "";
+                      const currentDockName = dockList.find((d) => d.id === currentDockId)?.name || row.location || currentDockId || "—";
+                      const selectedDockId = selectedDocks[shipKey] || currentDockId;
+                      const selectedDock = dockList.find((d) => d.id === selectedDockId);
+                      const canMoveDock = !!selectedDockId && selectedDockId !== currentDockId;
+                      return (
+                      <tr key={shipKey}>
                         <td className="font-mono">{row.id || "—"}</td>
                         <td>{row.customerName || "—"}</td>
                         <td><span style={{ padding: "2px 6px", borderRadius: "4px", fontSize: "10px", background: "rgba(0,230,138,0.1)", color: "var(--success)" }}>{row.status || "PICKED"}</span></td>
                         <td><span style={{ padding: "2px 6px", borderRadius: "4px", fontSize: "10px", background: "rgba(77,105,255,0.1)", color: "var(--accent)" }}>{row.loadStatus || "NEW"}</span></td>
-                        <td>{row.dockId || "—"}</td>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <select
+                              value={selectedDockId}
+                              onChange={(e) => setSelectedDocks((prev) => ({ ...prev, [shipKey]: e.target.value }))}
+                              onFocus={() => loadDocks()}
+                              onClick={() => loadDocks()}
+                              style={{ minWidth: "130px", background: "rgba(7, 20, 40, 0.92)", border: "1px solid var(--border-strong)", borderRadius: "5px", color: "#fff", padding: "5px 8px", fontSize: "11px", fontWeight: 600 }}
+                            >
+                              <option value={currentDockId}>{currentDockName}</option>
+                              {dockList.filter((d) => d.id !== currentDockId).map((d) => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                              ))}
+                            </select>
+                            <button
+                              className="btn-action"
+                              disabled={!canMoveDock}
+                              title={canMoveDock ? "Change outbound shipping dock" : "Select a different dock first"}
+                              style={{ padding: "3px 8px", fontSize: "9px", borderColor: canMoveDock ? "var(--warning)" : "var(--border)", color: canMoveDock ? "var(--warning)" : "var(--fg-muted)", opacity: canMoveDock ? 1 : 0.45 }}
+                              onClick={() => {
+                                if (!canMoveDock) return;
+                                setOrderDockConfirm({ row, newDockId: selectedDockId, newDockName: selectedDock?.name || selectedDockId });
+                              }}
+                            >
+                              Move
+                            </button>
+                          </div>
+                        </td>
                         <td className="font-mono">{row.entryId || "—"}</td>
                         <td>
                           <select
-                            value={selectedAssignees[`ship-${row.loadTaskId || i}`] || row.assignee || ""}
-                            onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [`ship-${row.loadTaskId || i}`]: e.target.value }))}
+                            value={selectedAssignees[shipKey] || row.assignee || ""}
+                            onChange={(e) => setSelectedAssignees((prev) => ({ ...prev, [shipKey]: e.target.value }))}
                             style={{ minWidth: "150px", background: "rgba(7, 20, 40, 0.92)", border: "1px solid var(--border-strong)", borderRadius: "5px", color: "#fff", padding: "4px 8px", fontSize: "11px", fontWeight: 600 }}
                           >
                             {BAY3_ASSIGNEES.map((a) => (
@@ -2284,7 +1932,7 @@ export default function Bay3Report() {
                             title={row.entryId ? "Assign load task" : "No ET — cannot assign"}
                             onClick={() => {
                               if (!row.entryId) return;
-                              const selectedName = selectedAssignees[`ship-${row.loadTaskId || i}`] || row.assignee || "";
+                              const selectedName = selectedAssignees[shipKey] || row.assignee || "";
                               const selected = BAY3_ASSIGNEES.find((a) => a.displayName === selectedName);
                               setAssignConfirm({ row: { ...row, assignee: selected?.displayName || selectedName, assigneeUserId: selected?.userId || row.assigneeUserId }, type: "order" });
                             }}
@@ -2293,97 +1941,12 @@ export default function Bay3Report() {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            </section>
-          )}
-
-          {/* Section 4 — Buscar Contenedor / Container Lookup */}
-          <section className="section-card">
-            <div className="section-header">
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <h2 className="section-title">Buscar Contenedor</h2>
-                <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Container Lookup</span>
-              </div>
-              {lookupResult && (
-                <button className="btn-action" onClick={() => { setLookupResult(null); setLookupError(null); }} style={{ padding: "4px 10px", fontSize: "10px" }}>Limpiar</button>
-              )}
-            </div>
-            <div style={{ padding: "12px 14px" }}>
-              <form onSubmit={(e) => { e.preventDefault(); performContainerLookup(lookupQuery); }} style={{ display: "flex", gap: "8px", marginBottom: lookupResult || lookupError ? "12px" : "0" }}>
-                <input
-                  type="text"
-                  placeholder="ONEU6407746, CSGU7067706..."
-                  value={lookupQuery}
-                  onChange={(e) => setLookupQuery(e.target.value)}
-                  style={{ flex: 1, padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "12px", background: "var(--bg-input)", color: "var(--fg)" }}
-                />
-                <button type="submit" className="btn-action primary" disabled={lookupLoading || !lookupQuery.trim() || !token} style={{ padding: "8px 16px", fontSize: "12px", opacity: lookupLoading || !lookupQuery.trim() ? 0.5 : 1 }}>
-                  {lookupLoading ? "Buscando..." : "Buscar"}
-                </button>
-              </form>
-
-              {lookupError && (
-                <div style={{ padding: "10px", background: "rgba(255,77,106,0.08)", border: "1px solid rgba(255,77,106,0.3)", borderRadius: "6px", fontSize: "11px", color: "var(--danger)" }}>
-                  {lookupError}
-                </div>
-              )}
-
-              {lookupResult && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {/* Result summary */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", padding: "10px 12px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "6px" }}>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Contenedor: <span style={{ color: "var(--fg-bright)", fontWeight: 600 }}>{lookupResult.containerNo}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Cliente: <span style={{ color: "var(--fg-bright)" }}>{lookupResult.customerName || "—"}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Entry Ticket: <span className="font-mono" style={{ color: "var(--accent)" }}>{lookupResult.entryTicket || "—"}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Recibo (RN): <span className="font-mono" style={{ color: "var(--accent)" }}>{lookupResult.receiptId || "—"}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Equipment ID: <span className="font-mono" style={{ color: "var(--fg)" }}>{lookupResult.equipmentId || "—"}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>ET Status: <span style={{ color: lookupResult.etStatus.includes("CHECKED") ? "var(--success)" : "var(--warning)" }}>{lookupResult.etStatus || "—"}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Dock: <span style={{ color: "var(--fg-bright)", fontWeight: 600 }}>{lookupResult.dockName || lookupResult.dockId || "Sin dock"}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Receipt Status: <span style={{ color: isInactiveStatus(lookupResult.receiptStatus) ? "var(--danger)" : "var(--success)" }}>{lookupResult.receiptStatus || "—"}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Receive Task: <span className="font-mono" style={{ color: lookupResult.taskId ? "var(--accent)" : "var(--fg-muted)" }}>{lookupResult.taskId || "No existe"}</span></div>
-                    <div style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Task Status: <span style={{ color: lookupResult.taskStatus === "IN_PROGRESS" ? "var(--success)" : "var(--fg)" }}>{lookupResult.taskStatus || "—"}</span></div>
-                  </div>
-
-                  {/* Readiness checks */}
-                  <div style={{ padding: "10px 12px", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "6px" }}>
-                    <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--fg-dim)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Verificaciones de disponibilidad</div>
-                    {[
-                      { label: "Recibo (RN)", ok: !!lookupResult.receiptId, detail: lookupResult.receiptId || "No encontrado" },
-                      { label: "Entry Ticket", ok: !!lookupResult.entryTicket, detail: lookupResult.entryTicket || "No encontrado" },
-                      { label: "Dock asignado", ok: !!lookupResult.dockId, detail: lookupResult.dockName || lookupResult.dockId || "Sin dock" },
-                      { label: "Receive Task", ok: !!lookupResult.taskId, detail: lookupResult.taskId || "No existe — se creará al asignar" },
-                      { label: "Dock consistente", ok: !lookupResult.taskDockId || lookupResult.taskDockId === lookupResult.dockId, detail: lookupResult.taskDockId && lookupResult.taskDockId !== lookupResult.dockId ? `⚠️ Task: ${lookupResult.taskDockId} ≠ ET: ${lookupResult.dockId}` : "OK" },
-                      { label: "Assignee", ok: !!lookupResult.taskAssigneeUserId, detail: lookupResult.taskAssigneeName || "Sin asignar" },
-                    ].map((check) => (
-                      <div key={check.label} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "3px 0", fontSize: "11px" }}>
-                        <span style={{ fontSize: "12px" }}>{check.ok ? "✅" : "❌"}</span>
-                        <span style={{ color: "var(--fg-dim)", minWidth: "110px" }}>{check.label}</span>
-                        <span style={{ color: check.ok ? "var(--fg)" : "var(--danger)", fontFamily: "var(--font-mono, monospace)", fontSize: "10px" }}>{check.detail}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Dock mismatch blocker */}
-                  {lookupResult.taskDockId && lookupResult.taskDockId !== lookupResult.dockId && (
-                    <div style={{ padding: "10px 12px", background: "rgba(255,77,106,0.06)", border: "1px solid rgba(255,77,106,0.3)", borderRadius: "6px" }}>
-                      <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--danger)", marginBottom: "4px" }}>⚠️ Bloqueador: Dock mismatch</div>
-                      <p style={{ fontSize: "10px", color: "var(--fg-dim)", margin: 0 }}>
-                        El receive task ({lookupResult.taskId}) tiene dock <strong style={{ color: "#fff" }}>{lookupResult.taskDockId}</strong> pero el entry ticket muestra dock <strong style={{ color: "#fff" }}>{lookupResult.dockId || "vacío"}</strong>.
-                        Check In fallará hasta que ambos coincidan. Use &ldquo;Move&rdquo; en la tabla de arriba para reconciliar, o corrija en WISE.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Refresh button */}
-                  <button className="btn-action" onClick={() => performContainerLookup(lookupResult.containerNo)} style={{ alignSelf: "flex-start", padding: "6px 14px", fontSize: "11px" }}>
-                    🔄 Refrescar datos
-                  </button>
-                </div>
-              )}
-            </div>
+            )}
           </section>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
@@ -2417,39 +1980,6 @@ export default function Bay3Report() {
                 </table>
               </div>
             )}
-          </aside>
-
-          {/* Trabajo de Hoy / Today's Workflow Cases */}
-          <aside className="section-card">
-            <div className="section-header">
-              <h2 className="section-title">Trabajo de Hoy</h2>
-              <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>Workflow reference</span>
-            </div>
-            <div style={{ padding: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
-              {WORKFLOW_CASES.map((wc) => (
-                <div key={wc.id} style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "6px", overflow: "hidden" }}>
-                  <button
-                    onClick={() => setExpandedCase(expandedCase === wc.id ? null : wc.id)}
-                    style={{ width: "100%", textAlign: "left", padding: "8px 10px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
-                  >
-                    <span style={{ fontSize: "10px", color: "var(--accent)" }}>{expandedCase === wc.id ? "▼" : "▶"}</span>
-                    <span style={{ fontSize: "10px", fontWeight: 600, color: "var(--fg-bright)" }}>{wc.container}</span>
-                    <span style={{ fontSize: "9px", color: "var(--fg-muted)", flex: 1 }}>{wc.title}</span>
-                  </button>
-                  {expandedCase === wc.id && (
-                    <div style={{ padding: "6px 10px 10px", borderTop: "1px solid var(--border-table)" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 12px", fontSize: "9px", color: "var(--fg-dim)", marginBottom: "6px" }}>
-                        <span>ET: <span className="font-mono" style={{ color: "var(--accent)" }}>{wc.et}</span></span>
-                        <span>RN: <span className="font-mono" style={{ color: "var(--accent)" }}>{wc.rn}</span></span>
-                        <span>Task: <span className="font-mono" style={{ color: "var(--accent)" }}>{wc.task}</span></span>
-                        <span>Dock: <span style={{ color: "var(--success)" }}>{wc.dock}</span></span>
-                      </div>
-                      <p style={{ fontSize: "9px", color: "var(--fg-muted)", margin: 0, lineHeight: 1.4 }}>{wc.pattern}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
           </aside>
 
           {/* Bay 3 Assignees */}
