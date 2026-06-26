@@ -1505,7 +1505,7 @@ export default function Bay3Report() {
             )}
           </div>
           {/* Table */}
-          {loading ? (
+          {loading && totalSuggestCount === 0 ? (
             <div className="empty-state">Loading suggestions...</div>
           ) : totalSuggestCount === 0 ? (
             <div className="empty-state">No tasks are available right now.</div>
@@ -1689,7 +1689,7 @@ export default function Bay3Report() {
                 <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{visibleReceipts.length} rows</span>
               </div>
             </div>
-            {loading ? (
+            {loading && visibleReceipts.length === 0 ? (
               <div className="empty-state">Loading...</div>
             ) : visibleReceipts.length === 0 ? (
               <div className="empty-state">No in-yard FULL equipment matched the Bay 3 scope.</div>
@@ -1798,7 +1798,7 @@ export default function Bay3Report() {
               </div>
             )}
 
-            {loading ? (
+            {loading && sortedOrders.length === 0 ? (
               <div className="empty-state">Loading...</div>
             ) : sortedOrders.length === 0 ? (
               <div className="empty-state">No orders match the current filters.</div>
@@ -1889,7 +1889,7 @@ export default function Bay3Report() {
                 <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{shippingLoads.length} rows</span>
               </div>
             </div>
-            {loading ? (
+            {loading && shippingLoads.length === 0 ? (
               <div className="empty-state">Loading outbound shipping...</div>
             ) : shippingLoads.length === 0 ? (
               <div className="empty-state">No outbound shipping loads available right now.</div>
