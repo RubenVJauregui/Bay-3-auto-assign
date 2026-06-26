@@ -14,7 +14,7 @@ const INYARD_CUSTOMERS = [
   "AMIEE LYNN, LNC.",
   "KARAKA, LLC",
   "SIMPLE MODERN",
-  "DELTA ELECTRONICS ( AMERICAS) LTD - NEW",
+  "DELTA ELECTRONICS (AMERICAS) LTD - NEW",
   "NZXT",
   "CMPC USA (Cut Paper and Rolls)",
   "WOODY FLAW CREST INC",
@@ -27,11 +27,19 @@ const INYARD_CUSTOMERS = [
   "the only bean",
 ];
 
+function normalizeCustomerName(name?: string): string {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[.,()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function matchesInYardCustomerScope(name?: string): boolean {
-  const normalized = String(name || "").toLowerCase().replace(/[.,]/g, "").trim();
+  const normalized = normalizeCustomerName(name);
   if (!normalized) return false;
   return INYARD_CUSTOMERS.some((target) => {
-    const t = target.toLowerCase().replace(/[.,]/g, "").trim();
+    const t = normalizeCustomerName(target);
     return normalized === t || normalized.includes(t) || t.includes(normalized);
   });
 }
@@ -43,7 +51,7 @@ const PLANNED_ORDER_CUSTOMERS = [
   "AMIEE LYNN, LNC.",
   "KARAKA, LLC",
   "SIMPLE MODERN",
-  "DELTA ELECTRONICS ( AMERICAS) LTD - NEW",
+  "DELTA ELECTRONICS (AMERICAS) LTD - NEW",
   "NZXT",
   "CMPC USA (Cut Paper and Rolls)",
   "WOODY FLAW CREST INC",
