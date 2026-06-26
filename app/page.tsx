@@ -66,6 +66,7 @@ const BAY3_ASSIGNEES = [
   { displayName: "RUBI MANUEL SANDOVAL", username: "mramirez", userId: "9233" },
   { displayName: "SEBASTIAN GONZALEZ", username: "rojiblancogonzalez@gmail.com", userId: "1932554036460883969" },
   { displayName: "JOSE MORALES", username: "employee21BH", userId: "1912952336996589570" },
+  { displayName: "BARTOLO RAMIREZ", username: "employee21BY", userId: "1912952433885138945" },
 ];
 
 interface Assignee {
