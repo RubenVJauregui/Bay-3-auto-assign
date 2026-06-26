@@ -1265,6 +1265,16 @@ export default function Bay3Report() {
     if (token) fetchData();
   }, [token, fetchData]);
 
+  // Safety guard: never leave the dashboard stuck on Loading if a WMS call hangs.
+  useEffect(() => {
+    if (!loading) return;
+    const guard = setTimeout(() => {
+      setLoading(false);
+      setDataError((prev) => prev || "Some WMS data is taking longer than expected. Showing available data.");
+    }, 25000);
+    return () => clearTimeout(guard);
+  }, [loading]);
+
   useEffect(() => {
     if (!token) return;
     setCountdown(REFRESH_INTERVAL_SEC);
