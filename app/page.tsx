@@ -132,6 +132,15 @@ function resolveAssigneeFromHistory(historyMap: Map<string, string>, customerId?
 const DASHBOARD_API = "https://wms-valley-view-dashboard-68cacf.coolify.item.pub";
 
 const REFRESH_INTERVAL_SEC = 300;
+const REQUEST_TIMEOUT_MS = 20000;
+
+function withTimeout(): AbortSignal | undefined {
+  try {
+    return AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  } catch {
+    return undefined;
+  }
+}
 
 interface Receipt {
   id?: string;
@@ -351,6 +360,7 @@ export default function Bay3Report() {
         "Item-Time-Zone": TIMEZONE,
       },
       body: JSON.stringify(body),
+      signal: withTimeout(),
     });
     if (!res.ok) return null;
     return res.json();
@@ -368,6 +378,7 @@ export default function Bay3Report() {
         "Item-Time-Zone": TIMEZONE,
       },
       body: JSON.stringify(body),
+      signal: withTimeout(),
     });
     if (!res.ok) return null;
     return res.json();
@@ -801,6 +812,7 @@ export default function Bay3Report() {
         "Item-Time-Zone": TIMEZONE,
       },
       body: JSON.stringify(body),
+      signal: withTimeout(),
     });
     if (res.status === 401 || res.status === 403) {
       setToken(null);
