@@ -1712,7 +1712,7 @@ export default function Bay3Report() {
                     {sortedReceipts.map((r, i) => (
                       <tr key={r.id || i}>
                         <td className="font-mono">{r.equipmentNumber || r.containerNo || r.trailerNo || "—"}</td>
-                        <td className="font-mono">{r.equipmentNumber ? `${r.equipmentNumber} | ${r.receiptId || r.entryTicket || "—"}` : (r.receiptId || r.entryTicket || r.id || "—")}</td>
+                        <td className="font-mono">{r.receiptId || r.entryTicket || r.id || "—"}</td>
                         <td>{r.checkIn ? formatPDT(r.checkIn) : formatPDT(r.inYardTime)}</td>
                         <td>{r.timeInYard || timeInYard(r.checkIn || r.inYardTime)}</td>
                         <td>{r.customerName || r.customer || "—"}</td>
