@@ -51,8 +51,7 @@ function getCustomerNameFromRecord(record: Record<string, unknown>): string {
   if (Array.isArray(names)) {
     const matched = names.map((x) => String(x || "").trim()).find((x) => matchesInYardCustomerScope(x));
     if (matched) return matched;
-    const first = names.map((x) => String(x || "").trim()).find(Boolean);
-    if (first) return first;
+    return names.map((x) => String(x || "").trim()).find(Boolean) || "";
   }
   return "";
 }
@@ -907,7 +906,10 @@ export default function Bay3Report() {
           const allRows = (iyData.rows as Record<string, unknown>[]) || [];
 
           // Filter to explicit Bay 3 customer scope only; never show rows with a blank customer.
-          const rows = allRows.filter((r) => matchesInYardCustomerScope(getCustomerNameFromRecord(r)));
+          const rows = allRows.filter((r) => {
+            const et = String(r.entryTicket || r.entryId || r.taskEntryId || r.entryTicketId || r.checkInEntry || "").trim();
+            return et.startsWith("ET-") && matchesInYardCustomerScope(getCustomerNameFromRecord(r));
+          });
 
           // Resolve RN IDs per row from the entry ticket details.
           // This avoids reusing a broad receipt-search result across different equipment rows.
@@ -1070,6 +1072,7 @@ export default function Bay3Report() {
             const entryId = (r.entryId as string) || "";
             const receiptStatus = String(r.status || r.receiptStatus || "").toUpperCase();
             if (!container || container.length < 6) continue;
+            if (!entryId.startsWith("ET-")) continue;
             if (!matchesInYardCustomerScope(custName)) continue;
             if (["CLOSED", "FORCE_CLOSED", "CANCELLED", "TASK_COMPLETED"].includes(receiptStatus)) continue;
             const devanned = Boolean(r.devannedTime || r.devanTime || r.devannedWhen || r.isDevanned === true);
