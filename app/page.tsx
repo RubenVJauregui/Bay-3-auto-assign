@@ -917,8 +917,8 @@ export default function Bay3Report() {
           const rnLookups = await Promise.all(
             rows.map(async (r) => {
               const eqNum = (r.equipmentNumber as string) || "";
-              const et = (r.entryTicket as string) || "";
-              if (!et) return null;
+              const et = String(r.entryTicket || r.entryId || r.taskEntryId || r.entryTicketId || r.checkInEntry || "").trim();
+              if (!et.startsWith("ET-")) return null;
               const headers = {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,
@@ -992,7 +992,7 @@ export default function Bay3Report() {
             })
             .map((r) => {
             const custName = getCustomerNameFromRecord(r) || "—";
-            const et = (r.entryTicket as string) || "";
+            const et = String(r.entryTicket || r.entryId || r.taskEntryId || r.entryTicketId || r.checkInEntry || "").trim();
             const eqNum = (r.equipmentNumber as string) || "";
             const stableId = et || eqNum;
             const resolved = resolveAssignee(custName, stableId);
