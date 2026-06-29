@@ -352,7 +352,7 @@ export default function Bay3Report() {
     return () => clearInterval(interval);
   }, []);
 
-  const [assignConfirm, setAssignConfirm] = useState<{ row: Receipt | Order; type: "inyard" | "order" } | null>(null);
+  const [assignConfirm, setAssignConfirm] = useState<{ row: Receipt | Order; type: "inyard" | "order" | "shipping" } | null>(null);
   const [assignStatus, setAssignStatus] = useState<string | null>(null);
   const [selectedAssignees, setSelectedAssignees] = useState<Record<string, string>>({});
   const [selectedDocks, setSelectedDocks] = useState<Record<string, string>>({});
@@ -546,6 +546,23 @@ export default function Bay3Report() {
     return assignPickTasks(taskIds);
   }, [wmsPost, wmsPut]);
 
+  const assignShippingLoadRow = useCallback(async (row: Order): Promise<{ ok: boolean; msg: string }> => {
+    const loadTaskId = row.loadTaskId || "";
+    const orderId = row.id || loadTaskId || "";
+    const assigneeUserId = row.assigneeUserId || "";
+    if (!loadTaskId) return { ok: false, msg: `Cannot assign ${orderId}. Missing outbound load task ID.` };
+    if (!assigneeUserId) return { ok: false, msg: `No assignee selected for ${orderId}.` };
+
+    const updateBody: Record<string, unknown> = { id: loadTaskId, assigneeUserId };
+    if (row.dockId) updateBody.dockId = row.dockId;
+
+    const res = await wmsPut("/wms/outbound/load-task/batch-update", [updateBody]);
+    if (!res || (res.code !== undefined && String(res.code) !== "0" && res.success !== true)) {
+      return { ok: false, msg: `Could not assign load task for ${orderId}.` };
+    }
+    return { ok: true, msg: `${orderId} load task assigned successfully.` };
+  }, [wmsPut]);
+
   const loadDocks = useCallback(async () => {
     if (!token || dockList.length > 0) return;
     try {
@@ -673,15 +690,15 @@ export default function Bay3Report() {
   const handleAssignConfirm = useCallback(async () => {
     if (!assignConfirm) return;
     const { row, type } = assignConfirm;
-    if (type === "order") {
+    if (type === "order" || type === "shipping") {
       setAssigning(true);
       const order = row as Order;
-      const result = await assignOutboundRow(order);
+      const result = type === "shipping" ? await assignShippingLoadRow(order) : await assignOutboundRow(order);
       setAssigning(false);
       setAssignConfirm(null);
       setAssignStatus(result.msg);
       if (result.ok) {
-        const key = order.id || "";
+        const key = type === "shipping" ? (order.loadTaskId || order.id || "") : (order.id || "");
         if (key) {
           addToAssigned(key);
           setAssignedByDashboard((prev) => new Set([...prev, key]));
@@ -693,6 +710,9 @@ export default function Bay3Report() {
             date: getTodayPT(),
           };
           addAssignedToday(record).then(() => fetchSharedAssignedToday().then((recs) => setAssignedTodayList(recs)));
+          if (type === "shipping") {
+            setShippingLoads((prev) => prev.map((o) => (o.loadTaskId === order.loadTaskId ? { ...o, assignee: order.assignee, assigneeUserId: order.assigneeUserId } : o)));
+          }
         }
       }
       setTimeout(() => setAssignStatus(null), 6000);
@@ -720,7 +740,7 @@ export default function Bay3Report() {
       }
     }
     setTimeout(() => setAssignStatus(null), 6000);
-  }, [assignConfirm, assignInYardRow, assignOutboundRow]);
+  }, [assignConfirm, assignInYardRow, assignOutboundRow, assignShippingLoadRow]);
 
   const handleAutoAssignAll = useCallback(async () => {
     const inyardRows = receipts.filter((r) => r.assigneeUserId);
@@ -1965,17 +1985,17 @@ export default function Bay3Report() {
                         <td>
                           <button
                             className="btn-action"
-                            style={{ padding: "2px 8px", fontSize: "9px", background: row.entryId ? "rgba(0,186,124,0.12)" : "rgba(255,255,255,0.05)", color: row.entryId ? "var(--success)" : "var(--fg-muted)", borderColor: row.entryId ? "var(--success)" : "var(--border)" }}
-                            disabled={!row.entryId}
-                            title={row.entryId ? "Assign load task" : "No ET — cannot assign"}
+                            style={{ padding: "2px 8px", fontSize: "9px", background: row.loadTaskId ? "rgba(0,186,124,0.12)" : "rgba(255,255,255,0.05)", color: row.loadTaskId ? "var(--success)" : "var(--fg-muted)", borderColor: row.loadTaskId ? "var(--success)" : "var(--border)" }}
+                            disabled={!row.loadTaskId}
+                            title={row.loadTaskId ? "Assign outbound load task" : "No load task — cannot assign"}
                             onClick={() => {
-                              if (!row.entryId) return;
+                              if (!row.loadTaskId) return;
                               const selectedName = selectedAssignees[shipKey] || row.assignee || "";
                               const selected = BAY3_ASSIGNEES.find((a) => a.displayName === selectedName);
-                              setAssignConfirm({ row: { ...row, assignee: selected?.displayName || selectedName, assigneeUserId: selected?.userId || row.assigneeUserId }, type: "order" });
+                              setAssignConfirm({ row: { ...row, assignee: selected?.displayName || selectedName, assigneeUserId: selected?.userId || row.assigneeUserId }, type: "shipping" });
                             }}
                           >
-                            {row.entryId ? "Assign" : "No ET"}
+                            {row.loadTaskId ? "Assign" : "No Task"}
                           </button>
                         </td>
                       </tr>
