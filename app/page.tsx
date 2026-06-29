@@ -44,6 +44,19 @@ function matchesInYardCustomerScope(name?: string): boolean {
   });
 }
 
+function getCustomerNameFromRecord(record: Record<string, unknown>): string {
+  const direct = String(record.customer || record.customerName || "").trim();
+  if (direct) return direct;
+  const names = record.customerNames;
+  if (Array.isArray(names)) {
+    const matched = names.map((x) => String(x || "").trim()).find((x) => matchesInYardCustomerScope(x));
+    if (matched) return matched;
+    const first = names.map((x) => String(x || "").trim()).find(Boolean);
+    if (first) return first;
+  }
+  return "";
+}
+
 
 const PLANNED_ORDER_CUSTOMERS = [
   "TCL NORTH AMERICA",
@@ -894,7 +907,7 @@ export default function Bay3Report() {
           const allRows = (iyData.rows as Record<string, unknown>[]) || [];
 
           // Filter to explicit Bay 3 customer scope only; never show rows with a blank customer.
-          const rows = allRows.filter((r) => matchesInYardCustomerScope((r.customer as string) || (r.customerName as string) || ""));
+          const rows = allRows.filter((r) => matchesInYardCustomerScope(getCustomerNameFromRecord(r)));
 
           // Resolve RN IDs per row from the entry ticket details.
           // This avoids reusing a broad receipt-search result across different equipment rows.
@@ -976,7 +989,7 @@ export default function Bay3Report() {
               return eqType.includes("container") || (!eqType.includes("trailer") && !eqType.includes("tractor"));
             })
             .map((r) => {
-            const custName = (r.customer as string) || "—";
+            const custName = getCustomerNameFromRecord(r) || "—";
             const et = (r.entryTicket as string) || "";
             const eqNum = (r.equipmentNumber as string) || "";
             const stableId = et || eqNum;
@@ -1052,12 +1065,13 @@ export default function Bay3Report() {
           for (const r of suppItems) {
             const container = (r.containerNo as string) || "";
             const rnId = (r.id as string) || "";
-            const custName = (r.customerName as string) || "";
+            const custName = getCustomerNameFromRecord(r);
             const devannedTime = (r.devannedTime as string) || null;
             const entryId = (r.entryId as string) || "";
+            const receiptStatus = String(r.status || r.receiptStatus || "").toUpperCase();
             if (!container || container.length < 6) continue;
-            if (!entryId) continue;
             if (!matchesInYardCustomerScope(custName)) continue;
+            if (["CLOSED", "FORCE_CLOSED", "CANCELLED", "TASK_COMPLETED"].includes(receiptStatus)) continue;
             const devanned = Boolean(r.devannedTime || r.devanTime || r.devannedWhen || r.isDevanned === true);
             if (devanned) continue;
             if (existingContainers.has(container) || existingRNs.has(rnId)) continue;
@@ -1077,6 +1091,8 @@ export default function Bay3Report() {
               customerName: custName,
               location: (r.dockName as string) || "",
               status: (r.status as string) || "OPEN",
+              receiptStatus: (r.status as string) || "",
+              equipmentStatus: (r.equipmentStatus as string) || "",
               details: "",
               id: entryId || rnId,
               containerNo: container,
@@ -1113,7 +1129,18 @@ export default function Bay3Report() {
                 } catch { /* skip, checkIn stays empty */ }
               })
             );
-            setReceipts((prev) => [...prev, ...supplementRows]);
+            setReceipts((prev) => {
+              const seen = new Set(prev.map((x) => `${x.containerNo || x.equipmentNumber || ""}|${x.receiptId || ""}`));
+              const merged = [...prev];
+              for (const row of supplementRows) {
+                const key = `${row.containerNo || row.equipmentNumber || ""}|${row.receiptId || ""}`;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  merged.push(row);
+                }
+              }
+              return merged;
+            });
           }
         }
       } catch { /* supplement fetch failed, Section 1 still shows upstream rows */ }
