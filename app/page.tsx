@@ -177,6 +177,8 @@ interface Receipt {
   appointmentTime?: string;
   assignee?: string;
   assigneeUserId?: string;
+  receiptStatus?: string;
+  equipmentStatus?: string;
 }
 
 interface Order {
@@ -931,10 +933,12 @@ export default function Bay3Report() {
                     || receipts.find((x: Record<string, unknown>) => actionReceiptIds.includes(String(x.id || "")))
                     || receipts[0];
                   const receiptId = actionReceiptIds[0] || String(matchingReceipt?.id || "");
+                  const receiptStatus = String(matchingReceipt?.status || "");
+                  const equipmentStatus = String(action?.status || action?.equipmentStatus || detail.equipmentStatus || "");
                   const dockId = String(action?.currentLocationId || detail.dockId || matchingReceipt?.dockId || "");
                   const dockName = String(action?.currentLocationName || detail.dockName || matchingReceipt?.dockName || "");
                   const checkInEndTime = String(detail.checkInEndTime || "");
-                  if (receiptId) return { eqNum, et, receiptId, dockId, dockName, checkInEndTime };
+                  if (receiptId) return { eqNum, et, receiptId, receiptStatus, equipmentStatus, dockId, dockName, checkInEndTime };
                 }
               } catch { /* fallback below */ }
 
@@ -955,15 +959,15 @@ export default function Bay3Report() {
                     (!eqNum || String(x.containerNo || x.equipmentNo || "") === eqNum)
                   );
                   const chosen = exact || imported || list[0];
-                  return { eqNum, et, receiptId: String(chosen.id || ""), dockId: String(chosen.dockId || ""), dockName: String(chosen.dockName || ""), checkInEndTime: "" };
+                  return { eqNum, et, receiptId: String(chosen.id || ""), receiptStatus: String(chosen.status || ""), equipmentStatus: "", dockId: String(chosen.dockId || ""), dockName: String(chosen.dockName || ""), checkInEndTime: "" };
                 }
               } catch { /* skip */ }
               return null;
             })
           );
-          const rnMap = new Map<string, { receiptId: string; dockId: string; dockName: string; checkInEndTime: string }>();
+          const rnMap = new Map<string, { receiptId: string; receiptStatus: string; equipmentStatus: string; dockId: string; dockName: string; checkInEndTime: string }>();
           for (const item of rnLookups) {
-            if (item) rnMap.set(item.et, { receiptId: item.receiptId, dockId: item.dockId, dockName: item.dockName, checkInEndTime: item.checkInEndTime });
+            if (item) rnMap.set(item.et, { receiptId: item.receiptId, receiptStatus: item.receiptStatus || "", equipmentStatus: item.equipmentStatus || "", dockId: item.dockId, dockName: item.dockName, checkInEndTime: item.checkInEndTime });
           }
 
           const enriched: Receipt[] = rows
@@ -983,6 +987,8 @@ export default function Bay3Report() {
               equipmentType: (r.equipmentType as string) || "",
               entryTicket: et,
               receiptId: rnInfo?.receiptId || "",
+              receiptStatus: rnInfo?.receiptStatus || (r.receiptStatus as string) || "",
+              equipmentStatus: rnInfo?.equipmentStatus || (r.equipmentStatus as string) || (r.status as string) || "",
               dockId: rnInfo?.dockId || (r.location as string) || "",
               checkIn: rnInfo?.checkInEndTime || (r.checkIn as string) || "",
               timeInYard: (r.timeInYard as string) || "",
@@ -1000,7 +1006,13 @@ export default function Bay3Report() {
           setReceipts(enriched.filter((r) => {
             const eq = String(r.equipmentNumber || r.containerNo || "");
             const type = String(r.equipmentType || "").toUpperCase();
-            return matchesInYardCustomerScope(r.customerName || r.customer) && !!eq && (type.includes("CONTAINER") || !!r.containerNo);
+            const receiptStatus = String(r.receiptStatus || "").toUpperCase();
+            const equipmentStatus = String(r.equipmentStatus || r.status || "").toUpperCase();
+            const isClosedOrEmpty =
+              ["CLOSED", "FORCE_CLOSED", "CANCELLED", "TASK_COMPLETED"].includes(receiptStatus) ||
+              equipmentStatus.includes("EMPTY AFTER OFFLOAD") ||
+              equipmentStatus.includes("CLOSED");
+            return matchesInYardCustomerScope(r.customerName || r.customer) && !!eq && (type.includes("CONTAINER") || !!r.containerNo) && !isClosedOrEmpty;
           }));
         } else {
           setReceipts([]);
