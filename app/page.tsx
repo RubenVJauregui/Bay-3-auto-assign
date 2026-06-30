@@ -17,6 +17,11 @@ const INYARD_CUSTOMERS = [
   "DELTA ELECTRONICS (AMERICAS) LTD - NEW",
   "NZXT",
   "CMPC USA (Cut Paper and Rolls)",
+  "CMPC USA INC",
+  "CMPC USA INC - Reverse",
+  "CMPC USA INC - Transferred",
+  "CMPC Rolls",
+  "CMPC",
   "WOODY FLAW CREST INC",
   "North Star",
   "CMPC USA",
@@ -51,7 +56,8 @@ function getCustomerNameFromRecord(record: Record<string, unknown>): string {
   if (Array.isArray(names)) {
     const matched = names.map((x) => String(x || "").trim()).find((x) => matchesInYardCustomerScope(x));
     if (matched) return matched;
-    return names.map((x) => String(x || "").trim()).find(Boolean) || "";
+    const first = names.map((x) => String(x || "").trim()).find(Boolean);
+    if (first) return first;
   }
   return "";
 }
@@ -66,6 +72,11 @@ const PLANNED_ORDER_CUSTOMERS = [
   "DELTA ELECTRONICS (AMERICAS) LTD - NEW",
   "NZXT",
   "CMPC USA (Cut Paper and Rolls)",
+  "CMPC USA INC",
+  "CMPC USA INC - Reverse",
+  "CMPC USA INC - Transferred",
+  "CMPC Rolls",
+  "CMPC",
   "WOODY FLAW CREST INC",
   "North Star",
   "CMPC USA",
@@ -905,7 +916,7 @@ export default function Bay3Report() {
         if (iyData?.supported) {
           const allRows = (iyData.rows as Record<string, unknown>[]) || [];
 
-          // Filter to explicit Bay 3 customer scope only; never show rows with a blank customer.
+          // Filter to explicit Bay 3 customer scope only; require a real active yard entry ticket.
           const rows = allRows.filter((r) => {
             const et = String(r.entryTicket || r.entryId || r.taskEntryId || r.entryTicketId || r.checkInEntry || "").trim();
             return et.startsWith("ET-") && matchesInYardCustomerScope(getCustomerNameFromRecord(r));
