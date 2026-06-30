@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
-const WMS_API = process.env.NEXT_PUBLIC_WMS_API_BASE_URL!;
-const IAM_URL = process.env.NEXT_PUBLIC_IAM_BASE_URL!;
+const WMS_API = "/api/wms";
+const IAM_URL = "/api/iam";
 const FACILITY_ID = process.env.NEXT_PUBLIC_FACILITY_ID!;
 const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID!;
 const TIMEZONE = process.env.NEXT_PUBLIC_TIMEZONE!;
@@ -844,7 +844,7 @@ export default function Bay3Report() {
         setAuthError("Invalid credentials. Please try again.");
       }
     } catch {
-      setAuthError("Unable to connect to authentication service.");
+      setAuthError("Network error connecting to login service. Please refresh and try again.");
     } finally {
       setLoggingIn(false);
     }
@@ -878,7 +878,7 @@ export default function Bay3Report() {
       localStorage.removeItem("bay3_token");
       throw new Error("Session expired");
     }
-    if (!res.ok) throw new Error("Data temporarily unavailable");
+    if (!res.ok) throw new Error(`WMS API error ${res.status}`);
     return res.json();
   }, [token]);
 
