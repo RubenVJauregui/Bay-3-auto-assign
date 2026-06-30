@@ -888,6 +888,9 @@ export default function Bay3Report() {
     setDataError(null);
     try {
       // --- In-Yard FULL Equipment: use proxied bay3 dashboard API ---
+      // Build Section 1 from all active Bay 3 containers that have a real ET in yard.
+      // Do not wait for task/dock assignment; ET + full/in-yard + Bay 3 customer is the visibility rule.
+      let nextReceipts: Receipt[] = [];
       let bay3Res: Record<string, unknown> | null = null;
       try {
         const res = await fetch("/api/dashboard-bay3", {
@@ -1029,7 +1032,7 @@ export default function Bay3Report() {
               assigneeUserId: resolved?.userId || "",
             };
           });
-          setReceipts(enriched.filter((r) => {
+          nextReceipts = enriched.filter((r) => {
             const eq = String(r.equipmentNumber || r.containerNo || "");
             const type = String(r.equipmentType || "").toUpperCase();
             const receiptStatus = String(r.receiptStatus || "").toUpperCase();
@@ -1039,12 +1042,12 @@ export default function Bay3Report() {
               equipmentStatus.includes("EMPTY AFTER OFFLOAD") ||
               equipmentStatus.includes("CLOSED");
             return matchesInYardCustomerScope(r.customerName || r.customer) && !!eq && (type.includes("CONTAINER") || !!r.containerNo) && !isClosedOrEmpty;
-          }));
+          });
         } else {
-          setReceipts([]);
+          nextReceipts = [];
         }
       } else {
-        setReceipts([]);
+        nextReceipts = [];
       }
 
       // --- Supplement: fetch non-closed receipts with containers for Bay 3 customers not already in Section 1 ---
@@ -1068,10 +1071,10 @@ export default function Bay3Report() {
           const suppData = await supplementRes.json();
           const suppItems: Record<string, unknown>[] = suppData?.data?.list || [];
           const existingContainers = new Set(
-            (receipts || []).map((r: Receipt) => r.containerNo || r.equipmentNumber || "").filter(Boolean)
+            nextReceipts.map((r: Receipt) => r.containerNo || r.equipmentNumber || "").filter(Boolean)
           );
           const existingRNs = new Set(
-            (receipts || []).map((r: Receipt) => r.receiptId || "").filter(Boolean)
+            nextReceipts.map((r: Receipt) => r.receiptId || "").filter(Boolean)
           );
 
           const supplementRows: Receipt[] = [];
@@ -1143,21 +1146,19 @@ export default function Bay3Report() {
                 } catch { /* skip, checkIn stays empty */ }
               })
             );
-            setReceipts((prev) => {
-              const seen = new Set(prev.map((x) => `${x.containerNo || x.equipmentNumber || ""}|${x.receiptId || ""}`));
-              const merged = [...prev];
-              for (const row of supplementRows) {
-                const key = `${row.containerNo || row.equipmentNumber || ""}|${row.receiptId || ""}`;
-                if (!seen.has(key)) {
-                  seen.add(key);
-                  merged.push(row);
-                }
+            const seen = new Set(nextReceipts.map((x) => `${x.containerNo || x.equipmentNumber || ""}|${x.receiptId || ""}`));
+            for (const row of supplementRows) {
+              const key = `${row.containerNo || row.equipmentNumber || ""}|${row.receiptId || ""}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                nextReceipts.push(row);
               }
-              return merged;
-            });
+            }
           }
         }
       } catch { /* supplement fetch failed, Section 1 still shows upstream rows */ }
+
+      setReceipts(nextReceipts);
 
       // --- Planned Orders: resolve customer IDs then fetch orders ---
       const allCustomers: Customer[] = [];
