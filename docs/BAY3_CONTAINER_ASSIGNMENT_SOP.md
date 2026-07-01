@@ -10,7 +10,7 @@ A container assignment is not complete until the handheld can open Dock Check, s
 
 A container should appear in Section 1 — In-Yard FULL Equipment when all are true:
 
-- Customer belongs to the Bay 3 scope.
+- Customer belongs to the Bay 3 scope. Lennox must be treated as Bay 3 using `ORG-754962`, `LENNOX INDUSTRIES INC.`, and `LENINT0001`.
 - Equipment is a full container in the yard.
 - It has an active real entry ticket (`ET-...`).
 - It is not closed, force closed, cancelled, task completed, empty after offload, devanned/processed, or checked out.

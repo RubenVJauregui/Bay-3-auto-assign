@@ -8,9 +8,15 @@ const FACILITY_ID = process.env.NEXT_PUBLIC_FACILITY_ID!;
 const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID!;
 const TIMEZONE = process.env.NEXT_PUBLIC_TIMEZONE!;
 
+const BAY3_CUSTOMER_IDS = [
+  "ORG-754962", // LENNOX INDUSTRIES INC.
+];
+
 const INYARD_CUSTOMERS = [
   "TCL NORTH AMERICA",
   "LENNOX INDUSTRIES INC.",
+  "LENNOX",
+  "LENINT0001",
   "AMIEE LYNN, LNC.",
   "KARAKA, LLC",
   "SIMPLE MODERN",
@@ -32,18 +38,6 @@ const INYARD_CUSTOMERS = [
   "the only bean",
 ];
 
-const BAY3_CUSTOMER_ID_MAP: Record<string, string> = {
-  "ORG-34818": "NZXT",
-  "ORG-40858": "CMPC USA (Cut Paper and Rolls)",
-  "ORG-614843": "CMPC USA INC",
-  "ORG-754962": "LENNOX INDUSTRIES INC.",
-  "ORG-436686": "NORTH STAR CONTAINER, LLC",
-  "ORG-313396": "LA JOLLA GROUP",
-  "ORG-639212": "WOODY FLAW CREST INC",
-  "ORG-655875": "GURUNANDA, LLC",
-  "ORG-585450": "KARAKA, LLC",
-};
-
 function normalizeCustomerName(name?: string): string {
   return String(name || "")
     .toLowerCase()
@@ -59,6 +53,16 @@ function matchesInYardCustomerScope(name?: string): boolean {
     const t = normalizeCustomerName(target);
     return normalized === t || normalized.includes(t) || t.includes(normalized);
   });
+}
+
+function getCustomerIdFromRecord(record: Record<string, unknown>): string {
+  return String(record.customerId || record.customerOrgId || record.orgId || record.ownerId || "").trim();
+}
+
+function matchesBay3CustomerRecord(record: Record<string, unknown>): boolean {
+  const customerId = getCustomerIdFromRecord(record);
+  if (customerId && BAY3_CUSTOMER_IDS.includes(customerId)) return true;
+  return matchesInYardCustomerScope(getCustomerNameFromRecord(record));
 }
 
 function getCustomerNameFromRecord(record: Record<string, unknown>): string {
@@ -179,43 +183,6 @@ function resolveAssigneeFromHistory(historyMap: Map<string, string>, customerId?
 }
 
 const DASHBOARD_API = "https://wms-valley-view-dashboard-68cacf.coolify.item.pub";
-
-const CONTAINER_WITHOUT_RN_DETAILS = [
-  ["ET #", "ET-1116411"],
-  ["Container #", "KOCU4564263"],
-  ["Status", "FULL_TO_OFFLOAD / not yet devanned"],
-  ["Location", "DOCK140"],
-  ["Gate Check-In", "2026-07-01 00:16:07"],
-  ["Carrier", "JUNCTION VENTURES LLC"],
-  ["Seal", "26H2084995"],
-  ["Customer", "No customer currently associated"],
-  ["Driver", "PE ANTONIO AL"],
-  ["Company code/tag", "UF"],
-];
-
-
-function ContainerWithoutRnSquare() {
-  return (
-    <section className="container-rn-square" aria-label="Container without RN">
-      <div className="container-rn-square-header">
-        <h3>Container Without RN</h3>
-        <div className="container-rn-tags">
-          <span className="card-tag">ET present</span>
-          <span className="card-tag warning-tag">Not devanned</span>
-          <span className="card-tag danger-tag">No RN</span>
-        </div>
-      </div>
-      <div className="container-rn-square-body">
-        {CONTAINER_WITHOUT_RN_DETAILS.map(([label, value]) => (
-          <div className="detail-row compact" key={label}>
-            <span className="detail-label">{label}</span>
-            <span className="detail-value">{value}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 const REFRESH_INTERVAL_SEC = 300;
 const REQUEST_TIMEOUT_MS = 20000;
@@ -971,7 +938,7 @@ export default function Bay3Report() {
           // Filter to explicit Bay 3 customer scope only; require a real active yard entry ticket.
           const rows = allRows.filter((r) => {
             const et = String(r.entryTicket || r.entryId || r.taskEntryId || r.entryTicketId || r.checkInEntry || "").trim();
-            return et.startsWith("ET-") && matchesInYardCustomerScope(getCustomerNameFromRecord(r));
+            return et.startsWith("ET-") && matchesBay3CustomerRecord(r);
           });
 
           // Resolve RN IDs per row from the entry ticket details.
@@ -1136,7 +1103,7 @@ export default function Bay3Report() {
             const receiptStatus = String(r.status || r.receiptStatus || "").toUpperCase();
             if (!container || container.length < 6) continue;
             if (!entryId.startsWith("ET-")) continue;
-            if (!matchesInYardCustomerScope(custName)) continue;
+            if (!matchesBay3CustomerRecord(r)) continue;
             if (["CLOSED", "FORCE_CLOSED", "CANCELLED", "TASK_COMPLETED"].includes(receiptStatus)) continue;
             const devanned = Boolean(r.devannedTime || r.devanTime || r.devannedWhen || r.isDevanned === true);
             if (devanned) continue;
@@ -1320,9 +1287,7 @@ export default function Bay3Report() {
 
           // Check if customer is in shipping scope (INYARD_CUSTOMERS includes Gurunanda)
           const custName = orderMatched.find((c) => c.id === custId)?.name
-            || BAY3_CUSTOMER_ID_MAP[custId]
-            || allCustomers.find((c) => c.id === custId)?.name
-            || "";
+            || (custId === "ORG-655875" ? "GURUNANDA, LLC" : "");
           const nameForScope = custName || custId;
           if (!matchesInYardCustomerScope(nameForScope)) continue;
 
@@ -1345,9 +1310,8 @@ export default function Bay3Report() {
 
           if (dnIds.length === 0) continue;
 
-          // Check if at least one DN is in an actionable state (not shipped/cancelled)
-          let hasActionable = false;
-          let foundStatus = "";
+          // Check if at least one DN is PICKED
+          let hasPicked = false;
           try {
             for (const dnId of dnIds.slice(0, 5)) {
               const orderDetailRes = await fetch(`${WMS_API}/wms/outbound/order/${encodeURIComponent(dnId)}`, {
@@ -1357,17 +1321,15 @@ export default function Bay3Report() {
               if (orderDetailRes.ok) {
                 const od = await orderDetailRes.json();
                 const orderDetail = od?.data || od || {};
-                const st = String(orderDetail.status || "").toUpperCase();
-                if (st === "PICKED" || st === "OPEN" || st === "IN_PROGRESS" || st === "PARTIAL_PICKED" || st === "PLANNED") {
-                  hasActionable = true;
-                  foundStatus = st;
+                if (String(orderDetail.status || "").toUpperCase() === "PICKED") {
+                  hasPicked = true;
                   break;
                 }
               }
             }
           } catch { /* skip */ }
 
-          if (!hasActionable) continue;
+          if (!hasPicked) continue;
 
           const stableId = taskId || dnIds[0] || "";
           const resolved = resolveAssigneeFromHistory(new Map<string, string>(), custId, nameForScope, stableId);
@@ -1377,7 +1339,7 @@ export default function Bay3Report() {
             id: dnIds[0] || taskId,
             customerId: custId,
             customerName: nameForScope,
-            status: foundStatus || "PICKED",
+            status: "PICKED",
             loadStatus: "NEW",
             shipMethod: "Load",
             loadTaskId: taskId,
@@ -1434,10 +1396,9 @@ export default function Bay3Report() {
     };
   }, [token, fetchData]);
 
-  // Keep in-yard containers visible even after assignment.
-  // Bay 3 uses Section 1 as the live yard/check-in board, so hiding assigned
-  // RNs makes active Lennox containers disappear while they still need dock/check-in validation.
-  const visibleReceipts = receipts;
+  const visibleReceipts = showAssignedHistory
+    ? receipts
+    : receipts.filter((r) => !assignedByDashboard.has(r.receiptId || r.entryTicket || r.id || ""));
 
   const visibleOrders = showAssignedHistory
     ? orders
@@ -1757,22 +1718,22 @@ export default function Bay3Report() {
       )}
 
       {/* KPI Strip */}
-      <div className="kpi-strip-with-container">
-        <button type="button" className="kpi-button" onClick={() => setActiveKpi(activeKpi === "inyard" ? null : "inyard")} style={{ border: activeKpi === "inyard" ? "1px solid var(--accent)" : "1px solid var(--border-strong)" }}>
-          <span className="kpi-value">{loading ? "—" : visibleReceipts.length}</span>
-          <span className="kpi-label">In-Yard FULL</span>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+        <button type="button" onClick={() => setActiveKpi(activeKpi === "inyard" ? null : "inyard")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "inyard" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : visibleReceipts.length}</span>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>In-Yard FULL</span>
         </button>
-        <button type="button" className="kpi-button" onClick={() => setActiveKpi(activeKpi === "allinbounds" ? null : "allinbounds")} style={{ border: activeKpi === "allinbounds" ? "1px solid var(--accent)" : "1px solid var(--border-strong)" }}>
-          <span className="kpi-value">{loading ? "—" : receipts.length}</span>
-          <span className="kpi-label">All Inbounds</span>
+        <button type="button" onClick={() => setActiveKpi(activeKpi === "allinbounds" ? null : "allinbounds")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "allinbounds" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : receipts.length}</span>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>All Inbounds</span>
         </button>
-        <button type="button" className="kpi-button" onClick={() => setActiveKpi(activeKpi === "planned" ? null : "planned")} style={{ border: activeKpi === "planned" ? "1px solid var(--accent)" : "1px solid var(--border-strong)" }}>
-          <span className="kpi-value">{loading ? "—" : orders.length}</span>
-          <span className="kpi-label">Planned Orders</span>
+        <button type="button" onClick={() => setActiveKpi(activeKpi === "planned" ? null : "planned")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "planned" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : orders.length}</span>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Planned Orders</span>
         </button>
-        <button type="button" className="kpi-button" onClick={() => setActiveKpi(activeKpi === "older48" ? null : "older48")} style={{ border: activeKpi === "older48" ? "1px solid var(--accent)" : "1px solid var(--border-strong)" }}>
-          <span className="kpi-value">{loading ? "—" : orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; }).length}</span>
-          <span className="kpi-label">Older than 48h</span>
+        <button type="button" onClick={() => setActiveKpi(activeKpi === "older48" ? null : "older48")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "older48" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; }).length}</span>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Older than 48h</span>
         </button>
       </div>
 
@@ -1806,10 +1767,10 @@ export default function Bay3Report() {
         );
       })()}
 
-      {/* Main Layout: Section 1 starts directly below KPI buttons; container card sits to its right */}
-      <div className="content-with-container-card">
+      {/* Main Layout: Left (tables) + Right (assignees) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "14px", alignItems: "start" }}>
         {/* Left Column */}
-        <div className="main-table-column">
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           {/* Section 1 - In-yard Equipment */}
           <section className="section-card">
             <div className="section-header">
@@ -2116,8 +2077,7 @@ export default function Bay3Report() {
             )}
           </section>
         </div>
-        <div className="container-side-column">
-          <ContainerWithoutRnSquare />
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
         </div>
       </div>
 
