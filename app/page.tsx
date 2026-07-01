@@ -1756,7 +1756,6 @@ export default function Bay3Report() {
           <span className="kpi-value">{loading ? "—" : orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; }).length}</span>
           <span className="kpi-label">Older than 48h</span>
         </button>
-        <ContainerWithoutRnSquare />
       </div>
 
       {/* KPI Detail Panel */}
@@ -1789,10 +1788,10 @@ export default function Bay3Report() {
         );
       })()}
 
-      {/* Main Layout: Left (tables) + Right (assignees) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "14px", alignItems: "start" }}>
+      {/* Main Layout: Section 1 starts directly below KPI buttons; container card sits to its right */}
+      <div className="content-with-container-card">
         {/* Left Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div className="main-table-column">
           {/* Section 1 - In-yard Equipment */}
           <section className="section-card">
             <div className="section-header">
@@ -2099,7 +2098,8 @@ export default function Bay3Report() {
             )}
           </section>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
+        <div className="container-side-column">
+          <ContainerWithoutRnSquare />
         </div>
       </div>
 
