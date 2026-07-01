@@ -181,6 +181,30 @@ const CONTAINER_WITHOUT_RN_DETAILS = [
   ["Company code/tag", "UF"],
 ];
 
+
+function ContainerWithoutRnSquare() {
+  return (
+    <section className="container-rn-square" aria-label="Container without RN">
+      <div className="container-rn-square-header">
+        <h3>Container Without RN</h3>
+        <div className="container-rn-tags">
+          <span className="card-tag">ET present</span>
+          <span className="card-tag warning-tag">Not devanned</span>
+          <span className="card-tag danger-tag">No RN</span>
+        </div>
+      </div>
+      <div className="container-rn-square-body">
+        {CONTAINER_WITHOUT_RN_DETAILS.map(([label, value]) => (
+          <div className="detail-row compact" key={label}>
+            <span className="detail-label">{label}</span>
+            <span className="detail-value">{value}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 const REFRESH_INTERVAL_SEC = 300;
 const REQUEST_TIMEOUT_MS = 20000;
 
@@ -1715,23 +1739,24 @@ export default function Bay3Report() {
       )}
 
       {/* KPI Strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
-        <button type="button" onClick={() => setActiveKpi(activeKpi === "inyard" ? null : "inyard")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "inyard" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
-          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : visibleReceipts.length}</span>
-          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>In-Yard FULL</span>
+      <div className="kpi-strip-with-container">
+        <button type="button" className="kpi-button" onClick={() => setActiveKpi(activeKpi === "inyard" ? null : "inyard")} style={{ border: activeKpi === "inyard" ? "1px solid var(--accent)" : "1px solid var(--border-strong)" }}>
+          <span className="kpi-value">{loading ? "—" : visibleReceipts.length}</span>
+          <span className="kpi-label">In-Yard FULL</span>
         </button>
-        <button type="button" onClick={() => setActiveKpi(activeKpi === "allinbounds" ? null : "allinbounds")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "allinbounds" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
-          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : receipts.length}</span>
-          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>All Inbounds</span>
+        <button type="button" className="kpi-button" onClick={() => setActiveKpi(activeKpi === "allinbounds" ? null : "allinbounds")} style={{ border: activeKpi === "allinbounds" ? "1px solid var(--accent)" : "1px solid var(--border-strong)" }}>
+          <span className="kpi-value">{loading ? "—" : receipts.length}</span>
+          <span className="kpi-label">All Inbounds</span>
         </button>
-        <button type="button" onClick={() => setActiveKpi(activeKpi === "planned" ? null : "planned")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "planned" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
-          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : orders.length}</span>
-          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Planned Orders</span>
+        <button type="button" className="kpi-button" onClick={() => setActiveKpi(activeKpi === "planned" ? null : "planned")} style={{ border: activeKpi === "planned" ? "1px solid var(--accent)" : "1px solid var(--border-strong)" }}>
+          <span className="kpi-value">{loading ? "—" : orders.length}</span>
+          <span className="kpi-label">Planned Orders</span>
         </button>
-        <button type="button" onClick={() => setActiveKpi(activeKpi === "older48" ? null : "older48")} style={{ all: "unset", cursor: "pointer", background: "var(--bg-card)", border: activeKpi === "older48" ? "1px solid var(--accent)" : "1px solid var(--border-strong)", borderRadius: "6px", padding: "16px 18px", boxShadow: "var(--shadow-card)", backdropFilter: "blur(8px)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", textAlign: "center" }}>
-          <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--fg-bright)" }}>{loading ? "—" : orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; }).length}</span>
-          <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Older than 48h</span>
+        <button type="button" className="kpi-button" onClick={() => setActiveKpi(activeKpi === "older48" ? null : "older48")} style={{ border: activeKpi === "older48" ? "1px solid var(--accent)" : "1px solid var(--border-strong)" }}>
+          <span className="kpi-value">{loading ? "—" : orders.filter(o => { if (!o.createdTime) return false; return (Date.now() - new Date(o.createdTime).getTime()) > 48 * 3600000; }).length}</span>
+          <span className="kpi-label">Older than 48h</span>
         </button>
+        <ContainerWithoutRnSquare />
       </div>
 
       {/* KPI Detail Panel */}
@@ -1768,7 +1793,6 @@ export default function Bay3Report() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "14px", alignItems: "start" }}>
         {/* Left Column */}
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 320px)", gap: "14px", alignItems: "start" }}>
           {/* Section 1 - In-yard Equipment */}
           <section className="section-card">
             <div className="section-header">
@@ -1855,28 +1879,6 @@ export default function Bay3Report() {
               </div>
             )}
           </section>
-
-          <section className="container-detail-card" style={{ minHeight: "320px" }}>
-            <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-              <div>
-                <h3>Container Without RN</h3>
-                <div style={{ marginTop: "5px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
-                  <span className="card-tag">ET present</span>
-                  <span className="card-tag" style={{ color: "var(--warning)", background: "rgba(255, 140, 66, 0.12)" }}>Not devanned</span>
-                  <span className="card-tag" style={{ color: "var(--danger)", background: "rgba(255, 77, 106, 0.12)" }}>No RN</span>
-                </div>
-              </div>
-            </div>
-            <div className="card-body">
-              {CONTAINER_WITHOUT_RN_DETAILS.map(([label, value]) => (
-                <div className="detail-row" key={label}>
-                  <span className="detail-label">{label}</span>
-                  <span className="detail-value">{value}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-          </div>
 
           {/* Section 2 - Planned Outbound Orders */}
           <section className="section-card">
