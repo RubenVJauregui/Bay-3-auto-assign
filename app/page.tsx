@@ -32,6 +32,18 @@ const INYARD_CUSTOMERS = [
   "the only bean",
 ];
 
+const BAY3_CUSTOMER_ID_MAP: Record<string, string> = {
+  "ORG-34818": "NZXT",
+  "ORG-40858": "CMPC USA (Cut Paper and Rolls)",
+  "ORG-614843": "CMPC USA INC",
+  "ORG-754962": "LENNOX INDUSTRIES INC.",
+  "ORG-436686": "NORTH STAR CONTAINER, LLC",
+  "ORG-313396": "LA JOLLA GROUP",
+  "ORG-639212": "WOODY FLAW CREST INC",
+  "ORG-655875": "GURUNANDA, LLC",
+  "ORG-585450": "KARAKA, LLC",
+};
+
 function normalizeCustomerName(name?: string): string {
   return String(name || "")
     .toLowerCase()
@@ -1308,7 +1320,9 @@ export default function Bay3Report() {
 
           // Check if customer is in shipping scope (INYARD_CUSTOMERS includes Gurunanda)
           const custName = orderMatched.find((c) => c.id === custId)?.name
-            || (custId === "ORG-655875" ? "GURUNANDA, LLC" : "");
+            || BAY3_CUSTOMER_ID_MAP[custId]
+            || allCustomers.find((c) => c.id === custId)?.name
+            || "";
           const nameForScope = custName || custId;
           if (!matchesInYardCustomerScope(nameForScope)) continue;
 
