@@ -41,6 +41,9 @@ Do not consider the assignment complete until the handheld can see Dock Check wi
 
 5. Assign the correct dock.
    - Set the target dock on the receive task.
+   - The `DOCK name` field must update to the exact dock requested by the user, for example `DOCK40`.
+   - The requested dock must be `AVAILABLE` before confirming the assignment.
+   - If the requested dock is blocked, occupied, or has stale occupancy, release/clear the dock first, then apply the requested dock again.
    - Use the internal dock/location ID when required by WMS/YMS, not only the dock name.
    - Example: `DOCK44` may correspond to internal location ID `569`.
 
