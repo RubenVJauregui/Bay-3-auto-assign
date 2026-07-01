@@ -2062,26 +2062,27 @@ export default function Bay3Report() {
           </section>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
-          {/* Bay 3 Assignees */}
-          <aside className="section-card">
-            <div className="section-header">
-              <h2 className="section-title">Bay 3 Assignees</h2>
-              <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{BAY3_ASSIGNEES.length} assignees</span>
-            </div>
-            <div style={{ padding: "10px", display: "flex", flexDirection: "column", gap: "6px" }}>
-              {BAY3_ASSIGNEES.map((a) => {
-                const initials = a.displayName.split(" ").map((w) => w[0]).join("").toUpperCase();
-                return (
-                  <div key={a.userId} className="assignee-card">
-                    <div className="assignee-avatar">{initials}</div>
-                    <div className="assignee-name">{a.displayName}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </aside>
         </div>
       </div>
+
+      {/* Bay 3 Assignees - horizontal at bottom */}
+      <section className="section-card" style={{ marginTop: "14px" }}>
+        <div className="section-header">
+          <h2 className="section-title">Bay 3 Assignees</h2>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{BAY3_ASSIGNEES.length} assignees</span>
+        </div>
+        <div style={{ padding: "10px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
+          {BAY3_ASSIGNEES.map((a) => {
+            const initials = a.displayName.split(" ").map((w) => w[0]).join("").toUpperCase();
+            return (
+              <div key={a.userId} className="assignee-card" style={{ minWidth: "140px" }}>
+                <div className="assignee-avatar">{initials}</div>
+                <div className="assignee-name">{a.displayName}</div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Assigned Today - full width at bottom */}
       <section className="section-card" style={{ marginTop: "14px" }}>
