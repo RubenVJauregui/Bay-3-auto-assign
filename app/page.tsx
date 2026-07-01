@@ -1434,9 +1434,10 @@ export default function Bay3Report() {
     };
   }, [token, fetchData]);
 
-  const visibleReceipts = showAssignedHistory
-    ? receipts
-    : receipts.filter((r) => !assignedByDashboard.has(r.receiptId || r.entryTicket || r.id || ""));
+  // Keep in-yard containers visible even after assignment.
+  // Bay 3 uses Section 1 as the live yard/check-in board, so hiding assigned
+  // RNs makes active Lennox containers disappear while they still need dock/check-in validation.
+  const visibleReceipts = receipts;
 
   const visibleOrders = showAssignedHistory
     ? orders
