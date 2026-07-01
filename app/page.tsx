@@ -168,6 +168,19 @@ function resolveAssigneeFromHistory(historyMap: Map<string, string>, customerId?
 
 const DASHBOARD_API = "https://wms-valley-view-dashboard-68cacf.coolify.item.pub";
 
+const CONTAINER_WITHOUT_RN_DETAILS = [
+  ["ET #", "ET-1116411"],
+  ["Container #", "KOCU4564263"],
+  ["Status", "FULL_TO_OFFLOAD / not yet devanned"],
+  ["Location", "DOCK140"],
+  ["Gate Check-In", "2026-07-01 00:16:07"],
+  ["Carrier", "JUNCTION VENTURES LLC"],
+  ["Seal", "26H2084995"],
+  ["Customer", "No customer currently associated"],
+  ["Driver", "PE ANTONIO AL"],
+  ["Company code/tag", "UF"],
+];
+
 const REFRESH_INTERVAL_SEC = 300;
 const REQUEST_TIMEOUT_MS = 20000;
 
@@ -1755,6 +1768,7 @@ export default function Bay3Report() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "14px", alignItems: "start" }}>
         {/* Left Column */}
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 320px)", gap: "14px", alignItems: "start" }}>
           {/* Section 1 - In-yard Equipment */}
           <section className="section-card">
             <div className="section-header">
@@ -1841,6 +1855,28 @@ export default function Bay3Report() {
               </div>
             )}
           </section>
+
+          <section className="container-detail-card" style={{ minHeight: "320px" }}>
+            <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+              <div>
+                <h3>Container Without RN</h3>
+                <div style={{ marginTop: "5px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                  <span className="card-tag">ET present</span>
+                  <span className="card-tag" style={{ color: "var(--warning)", background: "rgba(255, 140, 66, 0.12)" }}>Not devanned</span>
+                  <span className="card-tag" style={{ color: "var(--danger)", background: "rgba(255, 77, 106, 0.12)" }}>No RN</span>
+                </div>
+              </div>
+            </div>
+            <div className="card-body">
+              {CONTAINER_WITHOUT_RN_DETAILS.map(([label, value]) => (
+                <div className="detail-row" key={label}>
+                  <span className="detail-label">{label}</span>
+                  <span className="detail-value">{value}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+          </div>
 
           {/* Section 2 - Planned Outbound Orders */}
           <section className="section-card">
