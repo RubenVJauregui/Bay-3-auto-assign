@@ -1,41 +1,33 @@
 # Lennox Shipping Report Format
 
-Customer: **LENNOX INDUSTRIES INC.** (`ORG-754962`)  
-Facility: **Valley View / LT_F1**
+For Lennox shipping reports, provide the complete report in one pass.
 
-## User Requirement
+Business scope:
+- Tenant: LT
+- Facility: LT_F1 / Valley View
+- Customer: LENNOX INDUSTRIES INC. / ORG-754962
+- Timezone: America/Los_Angeles
 
-For daily Lennox shipping reports, provide the complete report together from the start. Do not send the operational status separately from pallet/carton totals.
-
-## Required Columns
-
-Each report should include, when available:
-
+Required columns:
 - DN
 - Load
-- Shipment / BOL / reference number
 - Status
-- Appointment date/time
+- Appointment time
 - Dock
 - Load task
-- Task status
 - Assignee
 - Carrier
 - Equipment / trailer
 - Seal
-- Pallets per DN/load
-- Cajas / cartons per DN/load
+- Pallets
+- Cajas / cartons
 
-## Required Totals
+Required totals:
+- Total pallets by DN/load
+- Total cajas/cartons by DN/load
+- Grand total pallets
+- Grand total cajas/cartons
 
-Always include a final summary with:
-
-- Total loads / DNs
-- Total pallets
-- Total cajas / cartons
-- Confirmation of shipped/open/pending status
-
-## Notes
-
-- If a pallet or carton value is missing from the primary load/order data, check related DN/order details before delivering the report.
-- The report should be practical and ready to use in operations.
+Notes:
+- Do not omit pallets or cajas/cartons.
+- If the user asks for a daily or rest-of-week Lennox shipping report, include all operational details and totals together from the start.
