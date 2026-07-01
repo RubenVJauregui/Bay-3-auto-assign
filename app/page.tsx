@@ -2062,38 +2062,6 @@ export default function Bay3Report() {
           </section>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
-          {/* Assigned Today Card */}
-          <aside className="section-card">
-            <div className="section-header">
-              <h2 className="section-title">Assigned Today</h2>
-              <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{assignedTodayList.length} task{assignedTodayList.length !== 1 ? "s" : ""}</span>
-            </div>
-            {assignedTodayList.length === 0 ? (
-              <div className="empty-state">No tasks assigned by this dashboard today.</div>
-            ) : (
-              <div style={{ padding: "8px", maxHeight: "200px", overflowY: "auto" }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ fontSize: "9px" }}>Task</th>
-                      <th style={{ fontSize: "9px" }}>Assignee</th>
-                      <th style={{ fontSize: "9px" }}>Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assignedTodayList.map((rec, i) => (
-                      <tr key={`${rec.key}-${i}`}>
-                        <td className="font-mono" style={{ fontSize: "10px" }}>{rec.key}</td>
-                        <td style={{ fontSize: "10px", color: "var(--accent)" }}>{rec.assignee}</td>
-                        <td style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{rec.time}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </aside>
-
           {/* Bay 3 Assignees */}
           <aside className="section-card">
             <div className="section-header">
@@ -2114,6 +2082,38 @@ export default function Bay3Report() {
           </aside>
         </div>
       </div>
+
+      {/* Assigned Today - full width at bottom */}
+      <section className="section-card" style={{ marginTop: "14px" }}>
+        <div className="section-header">
+          <h2 className="section-title">Assigned Today</h2>
+          <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{assignedTodayList.length} task{assignedTodayList.length !== 1 ? "s" : ""}</span>
+        </div>
+        {assignedTodayList.length === 0 ? (
+          <div className="empty-state">No tasks assigned by this dashboard today.</div>
+        ) : (
+          <div style={{ padding: "8px", maxHeight: "300px", overflowY: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ fontSize: "9px" }}>Task</th>
+                  <th style={{ fontSize: "9px" }}>Assignee</th>
+                  <th style={{ fontSize: "9px" }}>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignedTodayList.map((rec, i) => (
+                  <tr key={`${rec.key}-${i}`}>
+                    <td className="font-mono" style={{ fontSize: "10px" }}>{rec.key}</td>
+                    <td style={{ fontSize: "10px", color: "var(--accent)" }}>{rec.assignee}</td>
+                    <td style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{rec.time}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* Assignment Confirmation Modal */}
       {assignConfirm && (
