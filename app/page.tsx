@@ -1345,8 +1345,9 @@ export default function Bay3Report() {
 
           if (dnIds.length === 0) continue;
 
-          // Check if at least one DN is PICKED
-          let hasPicked = false;
+          // Check if at least one DN is in an actionable state (not shipped/cancelled)
+          let hasActionable = false;
+          let foundStatus = "";
           try {
             for (const dnId of dnIds.slice(0, 5)) {
               const orderDetailRes = await fetch(`${WMS_API}/wms/outbound/order/${encodeURIComponent(dnId)}`, {
@@ -1356,15 +1357,17 @@ export default function Bay3Report() {
               if (orderDetailRes.ok) {
                 const od = await orderDetailRes.json();
                 const orderDetail = od?.data || od || {};
-                if (String(orderDetail.status || "").toUpperCase() === "PICKED") {
-                  hasPicked = true;
+                const st = String(orderDetail.status || "").toUpperCase();
+                if (st === "PICKED" || st === "OPEN" || st === "IN_PROGRESS" || st === "PARTIAL_PICKED" || st === "PLANNED") {
+                  hasActionable = true;
+                  foundStatus = st;
                   break;
                 }
               }
             }
           } catch { /* skip */ }
 
-          if (!hasPicked) continue;
+          if (!hasActionable) continue;
 
           const stableId = taskId || dnIds[0] || "";
           const resolved = resolveAssigneeFromHistory(new Map<string, string>(), custId, nameForScope, stableId);
@@ -1374,7 +1377,7 @@ export default function Bay3Report() {
             id: dnIds[0] || taskId,
             customerId: custId,
             customerName: nameForScope,
-            status: "PICKED",
+            status: foundStatus || "PICKED",
             loadStatus: "NEW",
             shipMethod: "Load",
             loadTaskId: taskId,
