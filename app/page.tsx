@@ -184,8 +184,57 @@ function resolveAssigneeFromHistory(historyMap: Map<string, string>, customerId?
 
 const DASHBOARD_API = "https://wms-valley-view-dashboard-68cacf.coolify.item.pub";
 
+
+function ContainerWithoutRnSquare({ items }: { items: ContainerNoRn[] }) {
+  return (
+    <section className="container-rn-square" aria-label="Container without RN">
+      <div className="container-rn-square-header">
+        <h3>Container Without RN</h3>
+        <div className="container-rn-tags">
+          <span className="card-tag">ET present</span>
+          <span className="card-tag warning-tag">Not devanned</span>
+          <span className="card-tag danger-tag">No RN</span>
+        </div>
+      </div>
+      <div className="container-rn-square-body">
+        {items.length === 0 ? (
+          <div className="empty-state">No containers without RN found.</div>
+        ) : (
+          items.map((item) => (
+            <div key={item.etId} style={{ borderBottom: "1px solid var(--border-table)", paddingBottom: "8px", marginBottom: "8px" }}>
+              <div className="detail-row compact"><span className="detail-label">ET #</span><span className="detail-value">{item.etId}</span></div>
+              <div className="detail-row compact"><span className="detail-label">Container #</span><span className="detail-value">{item.containerNo}</span></div>
+              <div className="detail-row compact"><span className="detail-label">Status</span><span className="detail-value">{item.status}</span></div>
+              <div className="detail-row compact"><span className="detail-label">Location</span><span className="detail-value">{item.location || "—"}</span></div>
+              <div className="detail-row compact"><span className="detail-label">Check-In</span><span className="detail-value">{item.checkIn || "—"}</span></div>
+              {item.carrier && <div className="detail-row compact"><span className="detail-label">Carrier</span><span className="detail-value">{item.carrier}</span></div>}
+              {item.seal && <div className="detail-row compact"><span className="detail-label">Seal</span><span className="detail-value">{item.seal}</span></div>}
+              <div className="detail-row compact"><span className="detail-label">Customer</span><span className="detail-value">{item.customer}</span></div>
+              {item.driver && <div className="detail-row compact"><span className="detail-label">Driver</span><span className="detail-value">{item.driver}</span></div>}
+              {item.company && <div className="detail-row compact"><span className="detail-label">Company</span><span className="detail-value">{item.company}</span></div>}
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 const REFRESH_INTERVAL_SEC = 300;
 const REQUEST_TIMEOUT_MS = 20000;
+
+interface ContainerNoRn {
+  etId: string;
+  containerNo: string;
+  status: string;
+  location: string;
+  checkIn: string;
+  carrier: string;
+  seal: string;
+  customer: string;
+  driver: string;
+  company: string;
+}
 
 function withTimeout(): AbortSignal | undefined {
   try {
@@ -402,6 +451,7 @@ export default function Bay3Report() {
   const [orderDockConfirm, setOrderDockConfirm] = useState<{ row: Order; newDockId: string; newDockName: string } | null>(null);
 
   const [assigning, setAssigning] = useState(false);
+  const [containersWithoutRn, setContainersWithoutRn] = useState<ContainerNoRn[]>([]);
 
   const wmsPost = useCallback(async (path: string, body: object) => {
     if (!token) throw new Error("Not authenticated");
@@ -1354,6 +1404,42 @@ export default function Bay3Report() {
         setShippingLoads(shippingRows);
       } catch { setShippingLoads([]); }
 
+      // --- Containers Without RN: ETs with equipment but no receipts ---
+      try {
+        const noRnRes = await wmsPost("/wms-bam/entry-ticket/search-by-paging", {
+          statuses: ["Gate Checked In", "Window Checked In", "Dock Checked In", "Waiting"],
+          currentPage: 1,
+          pageSize: 100,
+        });
+        const noRnItems: Record<string, unknown>[] = noRnRes?.data?.list || [];
+        const noRnRows: ContainerNoRn[] = [];
+        for (const et of noRnItems) {
+          const receipts = (et.receipts as Array<Record<string, unknown>>) || [];
+          if (receipts.length > 0) continue;
+          const chk = (et.entryTicketCheck as Record<string, unknown>) || {};
+          const containers: string[] = (chk.containerNOs as string[]) || [];
+          const trailers: string[] = (chk.trailers as string[]) || [];
+          const equip = (containers[0] || trailers[0] || "") as string;
+          if (!equip) continue;
+          const cids: string[] = (et.customerIds as string[]) || [];
+          const custName = cids.length > 0 ? (cids[0] || "") : "";
+          if (custName && !matchesInYardCustomerScope(custName)) continue;
+          noRnRows.push({
+            etId: (et.id as string) || "",
+            containerNo: equip,
+            status: (et.status as string) || "",
+            location: (et.dockName as string) || (et.dockId as string) || "",
+            checkIn: (et.checkInStartTime as string) || (et.createdWhen as string) || "",
+            carrier: ((et.entryTicketCheck as Record<string, unknown>)?.carrierName as string) || "",
+            seal: ((et.entryTicketCheck as Record<string, unknown>)?.sealNo as string) || "",
+            customer: custName || "No customer associated",
+            driver: ((et.entryTicketCheck as Record<string, unknown>)?.driverName as string) || "",
+            company: ((et.entryTicketCheck as Record<string, unknown>)?.companyCode as string) || "",
+          });
+        }
+        setContainersWithoutRn(noRnRows);
+      } catch { setContainersWithoutRn([]); }
+
       setGeneratedAt(new Date());
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unable to load data at this time";
@@ -2077,7 +2163,8 @@ export default function Bay3Report() {
             )}
           </section>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
+        <div className="container-side-column">
+          <ContainerWithoutRnSquare items={containersWithoutRn} />
         </div>
       </div>
 
