@@ -1422,8 +1422,6 @@ export default function Bay3Report() {
           const equip = (containers[0] || trailers[0] || "") as string;
           if (!equip) continue;
           const cids: string[] = (et.customerIds as string[]) || [];
-          const custName = cids.length > 0 ? (cids[0] || "") : "";
-          if (custName && !matchesInYardCustomerScope(custName)) continue;
           noRnRows.push({
             etId: (et.id as string) || "",
             containerNo: equip,
@@ -1432,7 +1430,7 @@ export default function Bay3Report() {
             checkIn: (et.checkInStartTime as string) || (et.createdWhen as string) || "",
             carrier: ((et.entryTicketCheck as Record<string, unknown>)?.carrierName as string) || "",
             seal: ((et.entryTicketCheck as Record<string, unknown>)?.sealNo as string) || "",
-            customer: custName || "No customer associated",
+            customer: cids[0] || "No customer associated",
             driver: ((et.entryTicketCheck as Record<string, unknown>)?.driverName as string) || "",
             company: ((et.entryTicketCheck as Record<string, unknown>)?.companyCode as string) || "",
           });
