@@ -1851,10 +1851,10 @@ export default function Bay3Report() {
         );
       })()}
 
-      {/* Main Layout: Left (tables) + Right (assignees) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "14px", alignItems: "start" }}>
+      {/* Main Layout: Left (tables) + Right (Container Without RN) */}
+      <div className="content-with-container-card">
         {/* Left Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div className="main-table-column">
           {/* Section 1 - In-yard Equipment */}
           <section className="section-card">
             <div className="section-header">
