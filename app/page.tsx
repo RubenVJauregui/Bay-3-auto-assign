@@ -1439,6 +1439,7 @@ export default function Bay3Report() {
       } catch { setContainersWithoutRn([]); }
 
       setGeneratedAt(new Date());
+      setDataError(null);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unable to load data at this time";
       if (msg !== "Session expired") {
@@ -1454,11 +1455,12 @@ export default function Bay3Report() {
   }, [token, fetchData]);
 
   // Safety guard: never leave the dashboard stuck on Loading if a WMS call hangs.
+  // Do not set the global unavailable banner here; long-running optional lookups
+  // should not make the whole dashboard look down while core rows are visible.
   useEffect(() => {
     if (!loading) return;
     const guard = setTimeout(() => {
       setLoading(false);
-      setDataError((prev) => prev || "Some WMS data is taking longer than expected. Showing available data.");
     }, 25000);
     return () => clearTimeout(guard);
   }, [loading]);
