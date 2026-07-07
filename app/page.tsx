@@ -390,7 +390,7 @@ export default function Bay3Report() {
   const [scanHistory, setScanHistory] = useState<string[]>([]);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
-  const SCAN_PATTERN = /^[A-Z]{3}\d{6}$/;
+  const SCAN_PATTERN = /^[A-Z]{2}[0-9]{6}[A-Z]$/;
 
   const handleScanSubmit = useCallback((raw: string) => {
     const trimmed = raw.trim().toUpperCase();
@@ -399,16 +399,16 @@ export default function Bay3Report() {
     setScanSuccess(null);
 
     if (!trimmed) {
-      setScanError("Escanee o ingrese un código de artículo.");
+      setScanError("Escanee o ingrese un serial de artículo.");
       return;
     }
 
     if (!SCAN_PATTERN.test(trimmed)) {
-      setScanError("Formato inválido. El código debe tener exactamente 3 letras seguidas de 6 números (ejemplo: ABC123456).");
+      setScanError("Formato inválido. El serial debe tener 2 letras, 6 números y 1 letra al final (ejemplo: AB123456C).");
       return;
     }
 
-    setScanSuccess(`Código escaneado: ${trimmed}`);
+    setScanSuccess(`Serial escaneado: ${trimmed}`);
     setScanHistory((prev) => [trimmed, ...prev.slice(0, 19)]);
     setScanInput("");
     setTimeout(() => {
@@ -1599,7 +1599,7 @@ export default function Bay3Report() {
         <div className="section-header">
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <h2 className="section-title">Escanear Artículo</h2>
-            <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>3 letras + 6 números (ej. ABC123456)</span>
+            <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>2 letras + 6 números + 1 letra (ej. AB123456C)</span>
           </div>
         </div>
         <div style={{ padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
@@ -1608,7 +1608,7 @@ export default function Bay3Report() {
               <input
                 ref={scanInputRef}
                 type="text"
-                placeholder="Escanee o escriba el código (ej. ABC123456)"
+                placeholder="Escanee o escriba el serial (ej. AB123456C)"
                 value={scanInput}
                 onChange={(e) => {
                   setScanInput(e.target.value);
