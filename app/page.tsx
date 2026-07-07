@@ -184,57 +184,8 @@ function resolveAssigneeFromHistory(historyMap: Map<string, string>, customerId?
 
 const DASHBOARD_API = "https://wms-valley-view-dashboard-68cacf.coolify.item.pub";
 
-
-function ContainerWithoutRnSquare({ items }: { items: ContainerNoRn[] }) {
-  return (
-    <section className="container-rn-square" aria-label="Container without RN">
-      <div className="container-rn-square-header">
-        <h3>Container Without RN</h3>
-        <div className="container-rn-tags">
-          <span className="card-tag">ET present</span>
-          <span className="card-tag warning-tag">Not devanned</span>
-          <span className="card-tag danger-tag">No RN</span>
-        </div>
-      </div>
-      <div className="container-rn-square-body">
-        {items.length === 0 ? (
-          <div className="empty-state">No containers without RN found.</div>
-        ) : (
-          items.map((item) => (
-            <div key={item.etId} style={{ borderBottom: "1px solid var(--border-table)", paddingBottom: "8px", marginBottom: "8px" }}>
-              <div className="detail-row compact"><span className="detail-label">ET #</span><span className="detail-value">{item.etId}</span></div>
-              <div className="detail-row compact"><span className="detail-label">Container #</span><span className="detail-value">{item.containerNo}</span></div>
-              <div className="detail-row compact"><span className="detail-label">Status</span><span className="detail-value">{item.status}</span></div>
-              <div className="detail-row compact"><span className="detail-label">Location</span><span className="detail-value">{item.location || "—"}</span></div>
-              <div className="detail-row compact"><span className="detail-label">Check-In</span><span className="detail-value">{item.checkIn || "—"}</span></div>
-              {item.carrier && <div className="detail-row compact"><span className="detail-label">Carrier</span><span className="detail-value">{item.carrier}</span></div>}
-              {item.seal && <div className="detail-row compact"><span className="detail-label">Seal</span><span className="detail-value">{item.seal}</span></div>}
-              <div className="detail-row compact"><span className="detail-label">Customer</span><span className="detail-value">{item.customer}</span></div>
-              {item.driver && <div className="detail-row compact"><span className="detail-label">Driver</span><span className="detail-value">{item.driver}</span></div>}
-              {item.company && <div className="detail-row compact"><span className="detail-label">Company</span><span className="detail-value">{item.company}</span></div>}
-            </div>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
 const REFRESH_INTERVAL_SEC = 300;
 const REQUEST_TIMEOUT_MS = 20000;
-
-interface ContainerNoRn {
-  etId: string;
-  containerNo: string;
-  status: string;
-  location: string;
-  checkIn: string;
-  carrier: string;
-  seal: string;
-  customer: string;
-  driver: string;
-  company: string;
-}
 
 function withTimeout(): AbortSignal | undefined {
   try {
@@ -433,6 +384,38 @@ export default function Bay3Report() {
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [scanInput, setScanInput] = useState("");
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanSuccess, setScanSuccess] = useState<string | null>(null);
+  const [scanHistory, setScanHistory] = useState<string[]>([]);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
+  const SCAN_PATTERN = /^[A-Z]{3}\d{6}$/;
+
+  const handleScanSubmit = useCallback((raw: string) => {
+    const trimmed = raw.trim().toUpperCase();
+    setScanInput(trimmed);
+    setScanError(null);
+    setScanSuccess(null);
+
+    if (!trimmed) {
+      setScanError("Escanee o ingrese un código de artículo.");
+      return;
+    }
+
+    if (!SCAN_PATTERN.test(trimmed)) {
+      setScanError("Formato inválido. El código debe tener exactamente 3 letras seguidas de 6 números (ejemplo: ABC123456).");
+      return;
+    }
+
+    setScanSuccess(`Código escaneado: ${trimmed}`);
+    setScanHistory((prev) => [trimmed, ...prev.slice(0, 19)]);
+    setScanInput("");
+    setTimeout(() => {
+      scanInputRef.current?.focus();
+    }, 50);
+  }, []);
+
   useEffect(() => {
     setAssignedByDashboard(getAssignedSet());
     fetchSharedAssignedToday().then((records) => setAssignedTodayList(records));
@@ -451,7 +434,6 @@ export default function Bay3Report() {
   const [orderDockConfirm, setOrderDockConfirm] = useState<{ row: Order; newDockId: string; newDockName: string } | null>(null);
 
   const [assigning, setAssigning] = useState(false);
-  const [containersWithoutRn, setContainersWithoutRn] = useState<ContainerNoRn[]>([]);
 
   const wmsPost = useCallback(async (path: string, body: object) => {
     if (!token) throw new Error("Not authenticated");
@@ -1404,42 +1386,7 @@ export default function Bay3Report() {
         setShippingLoads(shippingRows);
       } catch { setShippingLoads([]); }
 
-      // --- Containers Without RN: ETs with equipment but no receipts ---
-      try {
-        const noRnRes = await wmsPost("/wms-bam/entry-ticket/search-by-paging", {
-          statuses: ["Gate Checked In", "Window Checked In", "Dock Checked In", "Waiting"],
-          currentPage: 1,
-          pageSize: 100,
-        });
-        const noRnItems: Record<string, unknown>[] = noRnRes?.data?.list || [];
-        const noRnRows: ContainerNoRn[] = [];
-        for (const et of noRnItems) {
-          const receipts = (et.receipts as Array<Record<string, unknown>>) || [];
-          if (receipts.length > 0) continue;
-          const chk = (et.entryTicketCheck as Record<string, unknown>) || {};
-          const containers: string[] = (chk.containerNOs as string[]) || [];
-          const trailers: string[] = (chk.trailers as string[]) || [];
-          const equip = (containers[0] || trailers[0] || "") as string;
-          if (!equip) continue;
-          const cids: string[] = (et.customerIds as string[]) || [];
-          noRnRows.push({
-            etId: (et.id as string) || "",
-            containerNo: equip,
-            status: (et.status as string) || "",
-            location: (et.dockName as string) || (et.dockId as string) || "",
-            checkIn: (et.checkInStartTime as string) || (et.createdWhen as string) || "",
-            carrier: ((et.entryTicketCheck as Record<string, unknown>)?.carrierName as string) || "",
-            seal: ((et.entryTicketCheck as Record<string, unknown>)?.sealNo as string) || "",
-            customer: cids[0] || "No customer associated",
-            driver: ((et.entryTicketCheck as Record<string, unknown>)?.driverName as string) || "",
-            company: ((et.entryTicketCheck as Record<string, unknown>)?.companyCode as string) || "",
-          });
-        }
-        setContainersWithoutRn(noRnRows);
-      } catch { setContainersWithoutRn([]); }
-
       setGeneratedAt(new Date());
-      setDataError(null);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unable to load data at this time";
       if (msg !== "Session expired") {
@@ -1455,12 +1402,11 @@ export default function Bay3Report() {
   }, [token, fetchData]);
 
   // Safety guard: never leave the dashboard stuck on Loading if a WMS call hangs.
-  // Do not set the global unavailable banner here; long-running optional lookups
-  // should not make the whole dashboard look down while core rows are visible.
   useEffect(() => {
     if (!loading) return;
     const guard = setTimeout(() => {
       setLoading(false);
+      setDataError((prev) => prev || "Some WMS data is taking longer than expected. Showing available data.");
     }, 25000);
     return () => clearTimeout(guard);
   }, [loading]);
@@ -1647,6 +1593,71 @@ export default function Bay3Report() {
           Data temporarily unavailable. The dashboard will retry automatically.
         </div>
       )}
+
+      {/* Scan / Programación Section */}
+      <section className="section-card">
+        <div className="section-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <h2 className="section-title">Escanear Artículo</h2>
+            <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>3 letras + 6 números (ej. ABC123456)</span>
+          </div>
+        </div>
+        <div style={{ padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: "1 1 300px" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <input
+                ref={scanInputRef}
+                type="text"
+                placeholder="Escanee o escriba el código (ej. ABC123456)"
+                value={scanInput}
+                onChange={(e) => {
+                  setScanInput(e.target.value);
+                  setScanError(null);
+                  setScanSuccess(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleScanSubmit(scanInput);
+                  }
+                }}
+                style={{ flex: 1, padding: "10px 14px", border: scanError ? "1px solid var(--danger, #ff4c6a)" : "1px solid var(--border-strong)", borderRadius: "6px", fontSize: "14px", fontFamily: "var(--font-geist-mono), monospace", background: "var(--bg-input, rgba(7,20,40,0.92))", color: "#fff", letterSpacing: "0.05em", textTransform: "uppercase" }}
+                autoComplete="off"
+                autoFocus
+              />
+              <button
+                className="btn-action primary"
+                style={{ padding: "10px 18px", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}
+                onClick={() => handleScanSubmit(scanInput)}
+              >
+                Validar
+              </button>
+            </div>
+            {scanError && (
+              <p style={{ fontSize: "12px", color: "var(--danger, #ff4c6a)", margin: 0, fontWeight: 500 }}>
+                {scanError}
+              </p>
+            )}
+            {scanSuccess && (
+              <p style={{ fontSize: "12px", color: "var(--success, #00ba7c)", margin: 0, fontWeight: 500 }}>
+                {scanSuccess}
+              </p>
+            )}
+          </div>
+          {scanHistory.length > 0 && (
+            <div style={{ flex: "0 0 auto", maxWidth: "220px" }}>
+              <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Últimos escaneados</span>
+              <div style={{ marginTop: "4px", display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                {scanHistory.slice(0, 8).map((code, i) => (
+                  <span key={`${code}-${i}`} style={{ fontSize: "11px", fontFamily: "var(--font-geist-mono), monospace", background: "rgba(0,186,124,0.1)", color: "var(--success, #00ba7c)", padding: "2px 8px", borderRadius: "4px", border: "1px solid rgba(0,186,124,0.2)" }}>
+                    {code}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Auto Suggest Panel */}
       {showAutoSuggest && (
@@ -1853,10 +1864,10 @@ export default function Bay3Report() {
         );
       })()}
 
-      {/* Main Layout: Left (tables) + Right (Container Without RN) */}
-      <div className="content-with-container-card">
+      {/* Main Layout: Left (tables) + Right (assignees) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "14px", alignItems: "start" }}>
         {/* Left Column */}
-        <div className="main-table-column">
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           {/* Section 1 - In-yard Equipment */}
           <section className="section-card">
             <div className="section-header">
@@ -2163,8 +2174,7 @@ export default function Bay3Report() {
             )}
           </section>
         </div>
-        <div className="container-side-column">
-          <ContainerWithoutRnSquare items={containersWithoutRn} />
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
         </div>
       </div>
 
