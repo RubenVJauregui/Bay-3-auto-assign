@@ -384,38 +384,6 @@ export default function Bay3Report() {
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [scanInput, setScanInput] = useState("");
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [scanSuccess, setScanSuccess] = useState<string | null>(null);
-  const [scanHistory, setScanHistory] = useState<string[]>([]);
-  const scanInputRef = useRef<HTMLInputElement>(null);
-
-  const SCAN_PATTERN = /^[A-Z]{2}[0-9]{6}[A-Z]$/;
-
-  const handleScanSubmit = useCallback((raw: string) => {
-    const trimmed = raw.trim().toUpperCase();
-    setScanInput(trimmed);
-    setScanError(null);
-    setScanSuccess(null);
-
-    if (!trimmed) {
-      setScanError("Escanee o ingrese un serial de artículo.");
-      return;
-    }
-
-    if (!SCAN_PATTERN.test(trimmed)) {
-      setScanError("Formato inválido. El serial debe tener 2 letras, 6 números y 1 letra al final (ejemplo: AB123456C).");
-      return;
-    }
-
-    setScanSuccess(`Serial escaneado: ${trimmed}`);
-    setScanHistory((prev) => [trimmed, ...prev.slice(0, 19)]);
-    setScanInput("");
-    setTimeout(() => {
-      scanInputRef.current?.focus();
-    }, 50);
-  }, []);
-
   useEffect(() => {
     setAssignedByDashboard(getAssignedSet());
     fetchSharedAssignedToday().then((records) => setAssignedTodayList(records));
@@ -1594,70 +1562,6 @@ export default function Bay3Report() {
         </div>
       )}
 
-      {/* Scan / Programación Section */}
-      <section className="section-card">
-        <div className="section-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <h2 className="section-title">Escanear Artículo</h2>
-            <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>2 letras + 6 números + 1 letra (ej. AB123456C)</span>
-          </div>
-        </div>
-        <div style={{ padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: "1 1 300px" }}>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <input
-                ref={scanInputRef}
-                type="text"
-                placeholder="Escanee o escriba el serial (ej. AB123456C)"
-                value={scanInput}
-                onChange={(e) => {
-                  setScanInput(e.target.value);
-                  setScanError(null);
-                  setScanSuccess(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleScanSubmit(scanInput);
-                  }
-                }}
-                style={{ flex: 1, padding: "10px 14px", border: scanError ? "1px solid var(--danger, #ff4c6a)" : "1px solid var(--border-strong)", borderRadius: "6px", fontSize: "14px", fontFamily: "var(--font-geist-mono), monospace", background: "var(--bg-input, rgba(7,20,40,0.92))", color: "#fff", letterSpacing: "0.05em", textTransform: "uppercase" }}
-                autoComplete="off"
-                autoFocus
-              />
-              <button
-                className="btn-action primary"
-                style={{ padding: "10px 18px", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}
-                onClick={() => handleScanSubmit(scanInput)}
-              >
-                Validar
-              </button>
-            </div>
-            {scanError && (
-              <p style={{ fontSize: "12px", color: "var(--danger, #ff4c6a)", margin: 0, fontWeight: 500 }}>
-                {scanError}
-              </p>
-            )}
-            {scanSuccess && (
-              <p style={{ fontSize: "12px", color: "var(--success, #00ba7c)", margin: 0, fontWeight: 500 }}>
-                {scanSuccess}
-              </p>
-            )}
-          </div>
-          {scanHistory.length > 0 && (
-            <div style={{ flex: "0 0 auto", maxWidth: "220px" }}>
-              <span style={{ fontSize: "10px", color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Últimos escaneados</span>
-              <div style={{ marginTop: "4px", display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                {scanHistory.slice(0, 8).map((code, i) => (
-                  <span key={`${code}-${i}`} style={{ fontSize: "11px", fontFamily: "var(--font-geist-mono), monospace", background: "rgba(0,186,124,0.1)", color: "var(--success, #00ba7c)", padding: "2px 8px", borderRadius: "4px", border: "1px solid rgba(0,186,124,0.2)" }}>
-                    {code}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
 
       {/* Auto Suggest Panel */}
       {showAutoSuggest && (
