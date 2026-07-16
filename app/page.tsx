@@ -36,6 +36,7 @@ const INYARD_CUSTOMERS = [
   "TPV USA",
   "Gurunanda",
   "the only bean",
+  "THE ONLY BEAN LLC",
 ];
 
 function normalizeCustomerName(name?: string): string {
@@ -99,6 +100,7 @@ const PLANNED_ORDER_CUSTOMERS = [
   "La Jolla",
   "ESI",
   "TPV USA",
+  "THE ONLY BEAN LLC",
 ];
 
 const OUTBOUND_SHIPPING_CUSTOMERS = [
