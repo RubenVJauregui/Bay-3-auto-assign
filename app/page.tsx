@@ -234,6 +234,7 @@ interface Order {
   scheduleDate?: string;
   mabd?: string;
   createdTime?: string;
+  appointmentTime?: string;
   status?: string;
   assignee?: string;
   assigneeUserId?: string;
@@ -289,6 +290,19 @@ function formatDate(isoStr?: string): string {
       month: "2-digit",
       day: "2-digit",
       year: "numeric",
+    });
+  } catch {
+    return isoStr;
+  }
+}
+
+function formatTime(isoStr?: string): string {
+  if (!isoStr) return "—";
+  try {
+    return new Date(isoStr).toLocaleTimeString("en-US", {
+      timeZone: TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
     });
   } catch {
     return isoStr;
@@ -1259,7 +1273,7 @@ export default function Bay3Report() {
               }
             } catch { /* load task may not exist for planned DN yet */ }
           }
-          return { ...o, customerName: custName, assignee: resolved?.displayName || "Unassigned", assigneeUserId: resolved?.userId || "", isLiveOutbound: true, dockId, location, loadTaskId };
+          return { ...o, customerName: custName, assignee: resolved?.displayName || "Unassigned", assigneeUserId: resolved?.userId || "", isLiveOutbound: true, dockId, location, loadTaskId, appointmentTime: (o.appointmentTime as string) || (o.mabd as string) || (o.scheduleDate as string) || "" };
         }));
         setOrders(enriched);
       } else {
@@ -1905,6 +1919,8 @@ export default function Bay3Report() {
                       <th onClick={() => toggleOrderSort("assignee")}>Assignee <SortArrow col="assignee" sort={orderSort} /></th>
                       <th>Action</th>
                       <th onClick={() => toggleOrderSort("createdTime")}>Created Date <SortArrow col="createdTime" sort={orderSort} /></th>
+                      <th onClick={() => toggleOrderSort("appointmentTime")}>Appt Date <SortArrow col="appointmentTime" sort={orderSort} /></th>
+                      <th>Appt Time</th>
                       <th onClick={() => toggleOrderSort("location")}>Location <SortArrow col="location" sort={orderSort} /></th>
                     </tr>
                   </thead>
@@ -1938,6 +1954,8 @@ export default function Bay3Report() {
                           </button>
                         </td>
                         <td>{formatPDT(o.createdTime)}</td>
+                        <td>{formatDate(o.appointmentTime)}</td>
+                        <td>{formatTime(o.appointmentTime)}</td>
                         <td>
                           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                             <select
