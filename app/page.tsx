@@ -122,7 +122,7 @@ const BAY3_ASSIGNEES = [
   { displayName: "JOSE MORALES", username: "employee21BH", userId: "1912952336996589570" },
   { displayName: "BARTOLO RAMIREZ", username: "employee21BY", userId: "1912952433885138945" },
   { displayName: "SILVANO SERTORIO HERNANDEZ", username: "employee13JZ", userId: "1932554285585764354" },
-  { displayName: "LUIS VELAZQUEZ (13GN)", username: "lvelazquez", userId: "" },
+  { displayName: "LUIS VELAZQUEZ (13GN)", username: "lvelazquez", userId: "965" },
 ];
 
 interface Assignee {
