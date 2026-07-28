@@ -1785,9 +1785,8 @@ export default function Bay3Report() {
         );
       })()}
 
-      {/* Main Layout: Left (tables) + Right (assignees) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "14px", alignItems: "start" }}>
-        {/* Left Column */}
+      {/* Main dashboard sections */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "14px", alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           {/* Section 1 - In-yard Equipment */}
           <section className="section-card">
@@ -2098,8 +2097,6 @@ export default function Bay3Report() {
               </div>
             )}
           </section>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px", position: "sticky", top: "12px" }}>
         </div>
       </div>
 
